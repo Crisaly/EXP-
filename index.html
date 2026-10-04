@@ -92,7 +92,7 @@ small{color:var(--m)}
 <button class="go" id="etest" style="height:44px;margin-top:10px">Send test email</button>
 <div class="msg" id="m-em"></div>
 <details style="margin-top:12px"><summary><b>Sending setup (EmailJS, free)</b></summary>
-<small>At emailjs.com add an email service and a template with To email = {{to_email}}, Subject = {{subject}}, body = {{message}}. Paste the IDs here. Without this, emails open in your mail app instead of sending directly.</small>
+<small>At emailjs.com add an email service and a template with To email = {{to_email}}, Subject = {{subject}}, and in the Code editor set the content to just {{{message_html}}} (three braces). That gives the designed email with pictures. Paste the IDs here. Without this, emails open in your mail app instead of sending directly.</small>
 <input id="j-svc" placeholder="Service ID" style="margin-top:8px"><input id="j-tpl" placeholder="Template ID" style="margin-top:8px"><input id="j-key" placeholder="Public key" style="margin-top:8px"></details>
 <h2>Scheduled alerts</h2>
 <small>Sends the expiring-soon list to the ticked recipients at this time, on the days you pick. All days selected means every day.</small>
@@ -177,17 +177,37 @@ $('dedupe').onclick = () => {
   save(); dash(); msg('m-dash', 'Removed ' + (n - S.log.length) + ' duplicate record(s).');
 };
 const ALERT_SUBJ = 'Alert: Items Expiring Soon (4 - 7 Days Left)';
-function alertBody() {
-  autoClean();
-  const seen = new Set(), lines = ['Items expiring soon (4–7 days left):', ''];
+function alertItems() {
+  autoClean(); const seen = new Set(), out = [];
   S.log.forEach(r => {
     const n = days(r.date); if (n < 4 || n > 7 || seen.has(r.code)) return; seen.add(r.code);
-    const p = byCode(r.code);
-    lines.push((p.desc || r.code), 'Item: ' + r.code + ' | Days left: ' + n + ' | Expires: ' + r.date.split('-').reverse().join('/') + (p.loc ? ' | Location: ' + p.loc : ''), '');
+    out.push({...byCode(r.code), code: r.code, n, date: r.date.split('-').reverse().join('/')});
   });
-  return seen.size ? lines.join('\n') : '';
+  return out;
 }
-$('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 'No items with 4–7 days left.', 1); send(ALERT_SUBJ, b, 'm-dash'); };
+function alertBody() {
+  const it = alertItems(); if (!it.length) return '';
+  return ['Items expiring soon (4–7 days left):', ''].concat(it.map(p => [(p.desc || p.code), 'Item: ' + p.code + ' | Days left: ' + p.n + ' | Expires: ' + p.date + (p.loc ? ' | Location: ' + p.loc : ''), ''].join('\n'))).join('\n');
+}
+function shell(inner) {
+  return '<div style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;padding:24px 12px;"><div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;"><div style="background:#2563eb;padding:16px 20px;"><span style="color:#ffffff;font-size:15px;font-weight:bold;">⏰ Expiry Tracker</span></div><div style="padding:6px 20px 20px;">' + inner + '</div><div style="padding:12px 20px;background:#f8fafc;font-size:11px;color:#94a3b8;text-align:center;">Sent via Product Expiry Tracker</div></div></div>';
+}
+function alertHtml() {
+  const it = alertItems();
+  const rows = it.map(p => {
+    const bg = p.n === 4 ? '#ffebe9' : '#fff8c5', fg = p.n === 4 ? '#cf222e' : '#9a6700';
+    const img = p.img ? '<img src="' + esc(p.img) + '" alt="' + esc(p.desc) + '" width="90" style="display:block;width:90px;height:auto;border-radius:8px;border:1px solid #cbd5e1;">'
+      : '<div style="width:90px;height:70px;line-height:70px;text-align:center;color:#64748b;background:#f1f5f9;border-radius:8px;font-family:Arial,sans-serif;font-size:11px;">No image</div>';
+    const loc = p.loc ? '<span style="display:inline-block;font-size:11px;font-weight:700;color:#ffffff;background:#dc2626;border-radius:8px;padding:4px 8px;margin-left:6px;">Location ' + esc(p.loc) + '</span>' : '';
+    return '<tr><td style="padding:14px 0;border-bottom:1px solid #f1f5f9;vertical-align:top;width:100px;">' + img + '</td><td style="padding:14px 0 14px 14px;border-bottom:1px solid #f1f5f9;vertical-align:top;">'
+      + '<div style="font-size:14px;font-weight:bold;color:#0f172a;margin-bottom:4px;">' + esc(p.desc || p.code) + '</div>'
+      + '<div style="font-size:12px;color:#64748b;margin-bottom:6px;">Item ' + esc(p.code) + '</div>'
+      + '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:8px;">Expires ' + p.date + '</div>'
+      + '<span style="display:inline-block;font-size:11px;font-weight:700;color:' + fg + ';background:' + bg + ';border-radius:8px;padding:4px 8px;">' + p.n + ' days left</span>' + loc + '</td></tr>';
+  }).join('');
+  return shell('<p style="font-size:14px;color:#0f172a;">The following ' + (it.length === 1 ? 'item is' : it.length + ' items are') + ' approaching their expiration date (4–7 days left):</p><table style="width:100%;border-collapse:collapse;">' + rows + '</table>');
+}
+$('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 'No items with 4–7 days left.', 1); send(ALERT_SUBJ, b, 'm-dash', false, alertHtml()); };
 
 // ---- products ----
 $('padd').onclick = () => {
@@ -256,7 +276,7 @@ $('rl').onchange = e => { const i = e.target.dataset.on; if (i != null) { S.reci
 $('rl').onclick = e => { const i = e.target.dataset.rm; if (i != null) { S.recipients.splice(i, 1); save(); rlist(); } };
 S.ejs = S.ejs || {};
 [['svc','j-svc'],['tpl','j-tpl'],['key','j-key']].forEach(([k, id]) => { $(id).value = S.ejs[k] || ''; $(id).oninput = () => { S.ejs[k] = $(id).value.trim(); save(); }; });
-async function send(subject, body, mid, auto) {
+async function send(subject, body, mid, auto, html) {
   const to = S.recipients.filter(r => r.on), j = S.ejs;
   if (!to.length) { msg(mid, 'Tick at least one recipient in Tools first.', 1); return false; }
   if (!j.svc || !j.tpl || !j.key) {
@@ -264,11 +284,12 @@ async function send(subject, body, mid, auto) {
     location.href = 'mailto:' + to.map(r => r.email).join(',') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
     return msg(mid, 'EmailJS is not set up, so your mail app was opened instead.', 1);
   }
+  const h = html || shell('<p style="font-size:14px;color:#0f172a;">' + esc(body).replace(/\n/g, '<br>') + '</p>');
   msg(mid, 'Sending…'); let ok = 0, bad = 0;
   for (const r of to) {
     try {
       const x = await fetch('https://api.emailjs.com/api/v1.0/email/send', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({service_id: j.svc, template_id: j.tpl, user_id: j.key, template_params: {to_email: r.email, to_name: r.name, subject, message: body}})});
+        body: JSON.stringify({service_id: j.svc, template_id: j.tpl, user_id: j.key, template_params: {to_email: r.email, to_name: r.name, from_name: 'Cristian', subject, message: body, message_html: h}})});
       x.ok ? ok++ : bad++;
     } catch (x) { bad++; }
   }
@@ -324,7 +345,7 @@ async function tick() {
       if (s.type === 'alert') {
         if (!s.days.includes(now.getDay()) || s.last.slice(0, 10) === today || late < 0 || late > 60) continue;
         const b = alertBody(); s.last = today + ' ' + s.time;
-        if (b) await send(ALERT_SUBJ, b, 'm-sch', true);
+        if (b) await send(ALERT_SUBJ, b, 'm-sch', true, alertHtml());
       } else {
         if (s.last) continue;
         const l = (now - new Date(s.date + 'T' + s.time)) / 6e4;
