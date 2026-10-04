@@ -56,7 +56,7 @@ small{color:var(--m)}
 
 <section id="dash" hidden>
 <h1>Live dashboard <small id="today"></small></h1>
-<div class="tools"><button class="b2" id="mail">✉️ Email alert</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
+<div class="tools"><button class="b2" id="mail">✉️ Email alert</button><button class="b2" id="prev">👁 Preview email</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
 <input id="q" placeholder="Search item, description, location…" style="height:42px;margin-bottom:12px">
 <div class="msg" id="m-dash"></div>
 <div class="sc"><table><thead><tr><th></th><th>Item</th><th>Expiry</th><th>Days</th><th>Status</th></tr></thead><tbody id="tb"></tbody></table></div>
@@ -106,6 +106,7 @@ small{color:var(--m)}
 <div id="sl"></div>
 <div class="msg" id="m-sch"></div>
 <small>Schedules run only while this page is open on a device that is awake. Keep it open on the store computer or tablet.</small>
+<small>App version 5 (HTML email)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -207,6 +208,7 @@ function alertHtml() {
   }).join('');
   return shell('<p style="font-size:14px;color:#0f172a;">The following ' + (it.length === 1 ? 'item is' : it.length + ' items are') + ' approaching their expiration date (4–7 days left):</p><table style="width:100%;border-collapse:collapse;">' + rows + '</table>');
 }
+$('prev').onclick = () => { if (!alertItems().length) return msg('m-dash', 'No items with 4–7 days left to preview.', 1); const w = window.open('', '_blank'); if (!w) return msg('m-dash', 'Allow pop-ups to preview.', 1); w.document.write('<meta name=viewport content="width=device-width">' + alertHtml()); w.document.close(); };
 $('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 'No items with 4–7 days left.', 1); send(ALERT_SUBJ, b, 'm-dash', false, alertHtml()); };
 
 // ---- products ----
