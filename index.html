@@ -34,6 +34,7 @@ small{color:var(--m)}
 .bd{padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap}
 .d{background:#ffebe9;color:#cf222e}.w{background:#fff8c5;color:#9a6700}.o{background:#dafbe1;color:#1a7f37}
 .sc{overflow-x:auto}
+.chip{flex:1;height:36px;padding:0;border-radius:10px;border:1px solid var(--bd);background:#f1f5f9;font-weight:700;font-size:12px;cursor:pointer}.chip.on{background:var(--p);color:#fff;border-color:var(--p)}
 #cam{position:fixed;inset:0;background:#000d;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9}
 #cam video{width:90%;max-width:480px;border-radius:14px}
 @media print{body{background:#fff;padding:0}nav,.tools,#q,.msg,section:not(#dash){display:none!important}section{border:0;box-shadow:none;padding:0}table{font-size:12pt}}
@@ -85,8 +86,26 @@ small{color:var(--m)}
 <button class="go red" id="clear">Clear records</button>
 <div class="msg" id="m-cl"></div>
 <h2>Email recipients</h2>
-<textarea id="em" placeholder="one@example.com, two@example.com"></textarea>
-<small>Saved on this device only. Email alert opens your mail app with the list filled in.</small>
+<div class="row"><input id="r-name" placeholder="Name"><input id="r-mail" type="email" placeholder="Email"><button class="b1" id="radd">Add</button></div>
+<small>Tick the people who should receive alerts. Saved on this device only.</small>
+<div id="rl" style="margin-top:6px"></div>
+<button class="go" id="etest" style="height:44px;margin-top:10px">Send test email</button>
+<div class="msg" id="m-em"></div>
+<details style="margin-top:12px"><summary><b>Sending setup (EmailJS, free)</b></summary>
+<small>At emailjs.com add an email service and a template with To email = {{to_email}}, Subject = {{subject}}, body = {{message}}. Paste the IDs here. Without this, emails open in your mail app instead of sending directly.</small>
+<input id="j-svc" placeholder="Service ID" style="margin-top:8px"><input id="j-tpl" placeholder="Template ID" style="margin-top:8px"><input id="j-key" placeholder="Public key" style="margin-top:8px"></details>
+<h2>Scheduled alerts</h2>
+<small>Sends the expiring-soon list to the ticked recipients at this time, on the days you pick. All days selected means every day.</small>
+<div class="row" style="margin-top:8px"><input type="time" id="s-time" value="08:00"><button class="b1" id="sadd">Add schedule</button></div>
+<div id="s-days" style="display:flex;gap:4px;margin-top:8px"></div>
+<h2>Reminder email</h2>
+<input id="mtext" placeholder="Reminder message">
+<div class="row" style="margin-top:8px"><input type="date" id="mdate"><input type="time" id="mtime"></div>
+<button class="b1" id="madd" style="margin-top:8px;width:100%">Add reminder</button>
+<h2>Scheduled list</h2>
+<div id="sl"></div>
+<div class="msg" id="m-sch"></div>
+<small>Schedules run only while this page is open on a device that is awake. Keep it open on the store computer or tablet.</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -103,8 +122,9 @@ const SCANNER_URL = 'https://crisaly.github.io/barcode-scanner/'; // fallback sc
 
 // ---- storage ----
 const K = 'expiryTracker.v1';
-let S = {products: [], log: [], emails: ''};
+let S = {products: [], log: [], recipients: [], ejs: {}};
 try { Object.assign(S, JSON.parse(localStorage.getItem(K)) || {}); } catch (e) {}
+if (typeof S.emails === 'string' && !S.recipients.length) S.recipients = S.emails.split(/[\s,;]+/).filter(Boolean).map(e => ({name: '', email: e, on: true}));
 const save = () => localStorage.setItem(K, JSON.stringify(S));
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -156,7 +176,8 @@ $('dedupe').onclick = () => {
   S.log = S.log.filter(r => { const k = r.code + '|' + r.date; if (seen.has(k)) return false; seen.add(k); return true; });
   save(); dash(); msg('m-dash', 'Removed ' + (n - S.log.length) + ' duplicate record(s).');
 };
-$('mail').onclick = () => {
+const ALERT_SUBJ = 'Alert: Items Expiring Soon (4 - 7 Days Left)';
+function alertBody() {
   autoClean();
   const seen = new Set(), lines = ['Items expiring soon (4–7 days left):', ''];
   S.log.forEach(r => {
@@ -164,11 +185,9 @@ $('mail').onclick = () => {
     const p = byCode(r.code);
     lines.push((p.desc || r.code), 'Item: ' + r.code + ' | Days left: ' + n + ' | Expires: ' + r.date.split('-').reverse().join('/') + (p.loc ? ' | Location: ' + p.loc : ''), '');
   });
-  if (!seen.size) return msg('m-dash', 'No items with 4–7 days left.', 1);
-  const to = S.emails.split(/[\s,;]+/).filter(Boolean).join(',');
-  if (!to) return msg('m-dash', 'Add recipient emails in the Tools tab first.', 1);
-  location.href = 'mailto:' + to + '?subject=' + encodeURIComponent('Alert: Items Expiring Soon (4 - 7 Days Left)') + '&body=' + encodeURIComponent(lines.join('\n'));
-};
+  return seen.size ? lines.join('\n') : '';
+}
+$('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 'No items with 4–7 days left.', 1); send(ALERT_SUBJ, b, 'm-dash'); };
 
 // ---- products ----
 $('padd').onclick = () => {
@@ -223,13 +242,105 @@ $('clear').onclick = () => {
 };
 
 // ---- email list + backup ----
-$('em').value = S.emails; $('em').oninput = () => { S.emails = $('em').value; save(); };
+function rlist() {
+  $('rl').innerHTML = S.recipients.map((r, i) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9"><input type="checkbox" data-on="${i}" ${r.on ? 'checked' : ''} style="width:22px;height:22px;flex:none"><span style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(r.name) || '–'}<br><small>${esc(r.email)}</small></span><button class="b2" data-rm="${i}">Remove</button></div>`).join('') || '<small>No recipients yet.</small>';
+}
+$('radd').onclick = () => {
+  const email = $('r-mail').value.trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) return msg('m-em', 'Enter a valid email address.', 1);
+  if (S.recipients.some(r => r.email.toLowerCase() === email.toLowerCase())) return msg('m-em', 'That email is already in the list.', 1);
+  S.recipients.push({name: $('r-name').value.trim(), email, on: true}); save(); rlist();
+  $('r-name').value = $('r-mail').value = ''; msg('m-em', 'Recipient added.');
+};
+$('rl').onchange = e => { const i = e.target.dataset.on; if (i != null) { S.recipients[i].on = e.target.checked; save(); } };
+$('rl').onclick = e => { const i = e.target.dataset.rm; if (i != null) { S.recipients.splice(i, 1); save(); rlist(); } };
+S.ejs = S.ejs || {};
+[['svc','j-svc'],['tpl','j-tpl'],['key','j-key']].forEach(([k, id]) => { $(id).value = S.ejs[k] || ''; $(id).oninput = () => { S.ejs[k] = $(id).value.trim(); save(); }; });
+async function send(subject, body, mid, auto) {
+  const to = S.recipients.filter(r => r.on), j = S.ejs;
+  if (!to.length) { msg(mid, 'Tick at least one recipient in Tools first.', 1); return false; }
+  if (!j.svc || !j.tpl || !j.key) {
+    if (auto) { msg(mid, 'Scheduled email skipped: set up EmailJS first.', 1); return false; }
+    location.href = 'mailto:' + to.map(r => r.email).join(',') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    return msg(mid, 'EmailJS is not set up, so your mail app was opened instead.', 1);
+  }
+  msg(mid, 'Sending…'); let ok = 0, bad = 0;
+  for (const r of to) {
+    try {
+      const x = await fetch('https://api.emailjs.com/api/v1.0/email/send', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({service_id: j.svc, template_id: j.tpl, user_id: j.key, template_params: {to_email: r.email, to_name: r.name, subject, message: body}})});
+      x.ok ? ok++ : bad++;
+    } catch (x) { bad++; }
+  }
+  msg(mid, 'Sent to ' + ok + ' recipient(s)' + (bad ? ', ' + bad + ' failed – check your EmailJS IDs.' : '.'), bad > 0);
+  return ok > 0;
+}
+$('etest').onclick = () => send('Test email – Expiry Tracker', 'This is a test message from your Expiry Tracker. If you can read this, alerts will reach you.', 'm-em');
+rlist();
 $('bk').onclick = () => dl('expiry-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(S), 'application/json');
 $('rs').onchange = async e => {
-  try { const d = JSON.parse(await e.target.files[0].text()); if (!Array.isArray(d.products) || !Array.isArray(d.log)) throw 0; S = Object.assign({emails: ''}, d); save(); $('em').value = S.emails; msg('m-bk', 'Backup restored.'); }
+  try { const d = JSON.parse(await e.target.files[0].text()); if (!Array.isArray(d.products) || !Array.isArray(d.log)) throw 0; S = Object.assign({recipients: [], ejs: {}}, d); save(); rlist(); S.sched = S.sched || []; slist(); msg('m-bk', 'Backup restored.'); }
   catch (x) { msg('m-bk', 'That file is not a valid backup.', 1); }
   e.target.value = '';
 };
+
+// ---- scheduled emails ----
+S.sched = S.sched || [];
+const DN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], ORD = [1,2,3,4,5,6,0], selDays = new Set(ORD);
+const pad = n => String(n).padStart(2, '0');
+const dkey = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+$('s-days').innerHTML = ORD.map(d => `<button type="button" class="chip on" data-d="${d}">${DN[d]}</button>`).join('');
+$('s-days').onclick = e => { const v = e.target.dataset.d; if (v == null) return; const d = +v; selDays.has(d) ? selDays.delete(d) : selDays.add(d); e.target.classList.toggle('on'); };
+$('sadd').onclick = () => {
+  if (!$('s-time').value) return msg('m-sch', 'Pick a time.', 1);
+  if (!selDays.size) return msg('m-sch', 'Pick at least one day.', 1);
+  S.sched.push({id: Date.now(), type: 'alert', time: $('s-time').value, days: [...selDays], on: true, last: ''});
+  save(); slist(); keepAwake(); msg('m-sch', 'Schedule added.');
+};
+$('madd').onclick = () => {
+  const text = $('mtext').value.trim(), date = $('mdate').value, time = $('mtime').value;
+  if (!text || !date || !time) return msg('m-sch', 'Enter the message, date and time.', 1);
+  S.sched.push({id: Date.now(), type: 'reminder', text, date, time, on: true, last: ''});
+  save(); slist(); keepAwake(); $('mtext').value = ''; msg('m-sch', 'Reminder added.');
+};
+function slist() {
+  $('sl').innerHTML = S.sched.map((s, i) => {
+    const what = s.type === 'alert'
+      ? 'Expiring alert · ' + s.time + '<br><small>' + (s.days.length === 7 ? 'Every day' : ORD.filter(d => s.days.includes(d)).map(d => DN[d]).join(', ')) + (s.last ? ' · last sent ' + s.last : '') + '</small>'
+      : 'Reminder · ' + s.date.split('-').reverse().join('/') + ' ' + s.time + '<br><small>' + esc(s.text) + (s.last ? ' · ' + s.last : '') + '</small>';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9"><input type="checkbox" data-son="${i}" ${s.on ? 'checked' : ''} style="width:22px;height:22px;flex:none"><span style="flex:1;min-width:0">${what}</span><button class="b2" data-srm="${i}">Remove</button></div>`;
+  }).join('') || '<small>Nothing scheduled.</small>';
+}
+$('sl').onchange = e => { const i = e.target.dataset.son; if (i != null) { S.sched[i].on = e.target.checked; save(); } };
+$('sl').onclick = e => { const i = e.target.dataset.srm; if (i != null) { S.sched.splice(i, 1); save(); slist(); } };
+let busy = false;
+async function tick() {
+  if (busy) return; busy = true;
+  try {
+    const now = new Date(), today = dkey(now);
+    for (const s of S.sched) {
+      if (!s.on) continue;
+      const due = new Date(today + 'T' + s.time), late = (now - due) / 6e4;
+      if (s.type === 'alert') {
+        if (!s.days.includes(now.getDay()) || s.last.slice(0, 10) === today || late < 0 || late > 60) continue;
+        const b = alertBody(); s.last = today + ' ' + s.time;
+        if (b) await send(ALERT_SUBJ, b, 'm-sch', true);
+      } else {
+        if (s.last) continue;
+        const l = (now - new Date(s.date + 'T' + s.time)) / 6e4;
+        if (l < 0) continue;
+        if (l > 60) { s.last = 'missed'; continue; }
+        s.last = (await send('Reminder', s.text, 'm-sch', true)) ? 'sent' : 'failed';
+      }
+    }
+    save(); slist();
+  } finally { busy = false; }
+}
+let wl;
+async function keepAwake() { try { if ('wakeLock' in navigator && !wl && S.sched.some(s => s.on)) { wl = await navigator.wakeLock.request('screen'); wl.onrelease = () => wl = null; } } catch (x) {} }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { keepAwake(); tick(); } });
+document.addEventListener('click', keepAwake, {once: true});
+setInterval(tick, 20000); slist(); tick();
 
 // ---- camera scanner ----
 let stream, raf, popup;
