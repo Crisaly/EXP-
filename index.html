@@ -106,7 +106,14 @@ small{color:var(--m)}
 <div id="sl"></div>
 <div class="msg" id="m-sch"></div>
 <small>Schedules run only while this page is open on a device that is awake. Keep it open on the store computer or tablet.</small>
-<small>App version 5 (HTML email)</small>
+<h2>Sync across devices</h2>
+<small>Free Firebase Realtime Database keeps every phone and computer on the same data. Paste the database URL and a secret key, press Connect, then use "Copy setup link" on your other devices.</small>
+<input id="sy-url" placeholder="https://your-project-default-rtdb.firebaseio.com" style="margin-top:8px">
+<input id="sy-key" placeholder="Secret store key (8+ characters)" style="margin-top:8px">
+<div class="tools" style="margin-top:8px"><button class="b2" id="sy-gen">Generate key</button><button class="b2" id="sy-save">Connect</button><button class="b2" id="sy-link">Copy setup link</button><button class="b2" id="sy-off">Disconnect</button></div>
+<label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
+<div class="msg" id="m-sy"></div>
+<small>App version 6 (sync + single email)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -123,10 +130,14 @@ const SCANNER_URL = 'https://crisaly.github.io/barcode-scanner/'; // fallback sc
 
 // ---- storage ----
 const K = 'expiryTracker.v1';
-let S = {products: [], log: [], recipients: [], ejs: {}};
+let S = {products: [], log: [], recipients: [], ejs: {}, sched: []};
 try { Object.assign(S, JSON.parse(localStorage.getItem(K)) || {}); } catch (e) {}
 if (typeof S.emails === 'string' && !S.recipients.length) S.recipients = S.emails.split(/[\s,;]+/).filter(Boolean).map(e => ({name: '', email: e, on: true}));
-const save = () => localStorage.setItem(K, JSON.stringify(S));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+function fixIds() { S.log.forEach(r => r.id = r.id || uid()); S.recipients.forEach(r => r.id = r.id || uid()); S.sched.forEach(r => r.id = String(r.id || uid())); }
+fixIds();
+const saveLocal = () => localStorage.setItem(K, JSON.stringify(S));
+const save = () => { saveLocal(); queue(); };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = d => d.slice(8) + '/' + d.slice(5, 7);
@@ -136,6 +147,85 @@ const byCode = c => S.products.find(p => p.code === c) || {};
 function find(v) { v = v.trim(); return S.products.find(p => v.length <= 6 ? p.code === v : p.barcode === v); } // same rule as your script
 function sortLog() { S.log.sort((a, b) => a.date.localeCompare(b.date)); }
 function autoClean() { const n = S.log.length; S.log = S.log.filter(r => days(r.date) >= MIN_DAYS); if (S.log.length !== n) save(); }
+
+// ---- cross-device sync (Firebase Realtime Database) ----
+const BK = 'expiryTracker.base';
+let cfg = null, base = null, seenTs = null, syncing = false, timer;
+try { cfg = JSON.parse(localStorage.getItem('expiryTracker.sync')); base = JSON.parse(localStorage.getItem(BK)); } catch (e) {}
+const hm = location.hash.match(/^#sync=(.+)$/);
+if (hm) { try { cfg = JSON.parse(atob(hm[1])); localStorage.setItem('expiryTracker.sync', JSON.stringify(cfg)); localStorage.setItem('expiryTracker.runsched', 'off'); base = null; localStorage.removeItem(BK); history.replaceState(null, '', location.pathname); } catch (e) {} }
+const root = () => cfg.url.replace(/\/+$/, '') + '/' + encodeURIComponent(cfg.key);
+const sk = s => String(s).replace(/[.$#\[\]\/]/g, '_');
+const G = {log: 'log', products: 'products', rec: 'recipients', sched: 'sched'};
+const setBase = b => { base = b; try { localStorage.setItem(BK, JSON.stringify(b)); } catch (e) {} };
+function flatOf(o) {
+  const m = {};
+  o.log.forEach(r => m['log/' + r.id] = JSON.stringify(r));
+  o.products.forEach(p => m['products/' + sk(p.code)] = JSON.stringify(p));
+  o.recipients.forEach(r => m['rec/' + r.id] = JSON.stringify(r));
+  o.sched.forEach(r => m['sched/' + r.id] = JSON.stringify(r));
+  if (o.ejs && Object.keys(o.ejs).length) m.ejs = JSON.stringify(o.ejs);
+  return m;
+}
+function stateOf(m) {
+  const o = {log: [], products: [], recipients: [], sched: [], ejs: {}};
+  for (const k in m) { const g = k.split('/')[0], v = JSON.parse(m[k]); if (g === 'ejs') o.ejs = v; else o[G[g]].push(v); }
+  return o;
+}
+function remoteFlat(d) {
+  const m = {};
+  for (const g in G) for (const k in (d[g] || {})) m[g + '/' + k] = JSON.stringify(d[g][k]);
+  if (d.ejs) m.ejs = JSON.stringify(d.ejs);
+  return m;
+}
+function dirty() { const c = flatOf(S), b = base || {}; return Object.keys(c).length !== Object.keys(b).length || Object.keys(c).some(k => c[k] !== b[k]); }
+async function push() {
+  const cur = flatOf(S), b = base || {}, d = {};
+  for (const k in cur) if (b[k] !== cur[k]) d[k] = JSON.parse(cur[k]);
+  for (const k in b) if (!(k in cur)) d[k] = null;
+  if (!Object.keys(d).length) return;
+  d['meta/ts'] = Date.now();
+  const r = await fetch(root() + '.json', {method: 'PATCH', body: JSON.stringify(d)});
+  if (!r.ok) throw new Error('Database refused (' + r.status + '). Check the URL, key and rules.');
+  setBase(cur);
+}
+async function sync() {
+  if (!cfg || syncing) return; syncing = true;
+  try {
+    const first = base === null;
+    if (!first) await push();
+    const ts = await (await fetch(root() + '/meta/ts.json')).json();
+    if (!first && ts == null) { setBase({}); await push(); }
+    else if (first || ts !== seenTs) {
+      const d = await (await fetch(root() + '.json')).json() || {}, rf = remoteFlat(d);
+      if (first) { Object.assign(S, stateOf({...rf, ...flatOf(S)})); setBase(rf); await push(); seenTs = null; saveLocal(); refresh(); }
+      else if (!dirty()) { Object.assign(S, stateOf(rf)); setBase(flatOf(S)); seenTs = ts; saveLocal(); refresh(); }
+    }
+    msg('m-sy', 'Synced ' + new Date().toLocaleTimeString());
+  } catch (e) { msg('m-sy', 'Sync problem: ' + e.message, 1); }
+  syncing = false;
+}
+function queue() { if (!cfg) return; clearTimeout(timer); timer = setTimeout(sync, 800); }
+function refresh() {
+  rlist(); slist();
+  [['svc', 'j-svc'], ['tpl', 'j-tpl'], ['key', 'j-key']].forEach(([k, id]) => { if (document.activeElement !== $(id)) $(id).value = (S.ejs || {})[k] || ''; });
+  if (!$('dash').hidden) dash(); if (!$('db').hidden) plist();
+}
+$('sy-url').value = cfg ? cfg.url : ''; $('sy-key').value = cfg ? cfg.key : '';
+$('sy-gen').onclick = () => { $('sy-key').value = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36).padStart(2, '0')).join(''); };
+$('sy-save').onclick = () => {
+  const url = $('sy-url').value.trim(), key = $('sy-key').value.trim();
+  if (!/^https:\/\/\S+$/.test(url) || key.length < 8) return msg('m-sy', 'Enter the database URL and a key of 8+ characters.', 1);
+  cfg = {url, key}; localStorage.setItem('expiryTracker.sync', JSON.stringify(cfg)); base = null; localStorage.removeItem(BK); seenTs = null; sync();
+};
+$('sy-off').onclick = () => { cfg = null; base = null; localStorage.removeItem('expiryTracker.sync'); localStorage.removeItem(BK); msg('m-sy', 'Disconnected. The data stays on this device.'); };
+$('sy-link').onclick = async () => {
+  if (!cfg) return msg('m-sy', 'Connect first.', 1);
+  const u = location.href.split('#')[0] + '#sync=' + btoa(JSON.stringify(cfg));
+  try { await navigator.clipboard.writeText(u); msg('m-sy', 'Setup link copied. Open it on your other device.'); } catch (e) { prompt('Copy this link:', u); }
+};
+$('sy-run').checked = localStorage.getItem('expiryTracker.runsched') !== 'off';
+$('sy-run').onchange = e => localStorage.setItem('expiryTracker.runsched', e.target.checked ? 'on' : 'off');
 
 // ---- tabs ----
 function tab(t) {
@@ -154,7 +244,7 @@ $('save').onclick = () => {
   if (!v || !d) return msg('m-log', 'Barcode and date required.', 1);
   const p = find(v);
   if (!p) return msg('m-log', 'Item code not found in Products. Add it in the Products tab first.', 1);
-  S.log.push({code: p.code, date: d}); sortLog(); save();
+  S.log.push({id: uid(), code: p.code, date: d}); sortLog(); save();
   msg('m-log', 'Saved: ' + p.code + ' – ' + (p.desc || '') + ' (' + fmt(d) + ')');
   $('bc').value = ''; $('dt').value = ''; focusBc();
 };
@@ -271,7 +361,7 @@ $('radd').onclick = () => {
   const email = $('r-mail').value.trim();
   if (!/^\S+@\S+\.\S+$/.test(email)) return msg('m-em', 'Enter a valid email address.', 1);
   if (S.recipients.some(r => r.email.toLowerCase() === email.toLowerCase())) return msg('m-em', 'That email is already in the list.', 1);
-  S.recipients.push({name: $('r-name').value.trim(), email, on: true}); save(); rlist();
+  S.recipients.push({id: uid(), name: $('r-name').value.trim(), email, on: true}); save(); rlist();
   $('r-name').value = $('r-mail').value = ''; msg('m-em', 'Recipient added.');
 };
 $('rl').onchange = e => { const i = e.target.dataset.on; if (i != null) { S.recipients[i].on = e.target.checked; save(); } };
@@ -287,22 +377,20 @@ async function send(subject, body, mid, auto, html) {
     return msg(mid, 'EmailJS is not set up, so your mail app was opened instead.', 1);
   }
   const h = html || shell('<p style="font-size:14px;color:#0f172a;">' + esc(body).replace(/\n/g, '<br>') + '</p>');
-  msg(mid, 'Sending…'); let ok = 0, bad = 0;
-  for (const r of to) {
-    try {
-      const x = await fetch('https://api.emailjs.com/api/v1.0/email/send', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({service_id: j.svc, template_id: j.tpl, user_id: j.key, template_params: {to_email: r.email, to_name: r.name, from_name: 'Cristian', subject, message: body, message_html: h}})});
-      x.ok ? ok++ : bad++;
-    } catch (x) { bad++; }
-  }
-  msg(mid, 'Sent to ' + ok + ' recipient(s)' + (bad ? ', ' + bad + ' failed – check your EmailJS IDs.' : '.'), bad > 0);
-  return ok > 0;
+  msg(mid, 'Sending…'); let ok = false;
+  try {
+    const x = await fetch('https://api.emailjs.com/api/v1.0/email/send', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({service_id: j.svc, template_id: j.tpl, user_id: j.key, template_params: {to_email: to.map(r => r.email).join(','), to_name: to.map(r => r.name).filter(Boolean).join(', '), from_name: 'Cristian', subject, message: body, message_html: h}})});
+    ok = x.ok;
+  } catch (x) {}
+  msg(mid, ok ? 'Sent one email to ' + to.length + ' recipient(s).' : 'Sending failed – check your EmailJS IDs.', !ok);
+  return ok;
 }
 $('etest').onclick = () => send('Test email – Expiry Tracker', 'This is a test message from your Expiry Tracker. If you can read this, alerts will reach you.', 'm-em');
 rlist();
 $('bk').onclick = () => dl('expiry-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(S), 'application/json');
 $('rs').onchange = async e => {
-  try { const d = JSON.parse(await e.target.files[0].text()); if (!Array.isArray(d.products) || !Array.isArray(d.log)) throw 0; S = Object.assign({recipients: [], ejs: {}}, d); save(); rlist(); S.sched = S.sched || []; slist(); msg('m-bk', 'Backup restored.'); }
+  try { const d = JSON.parse(await e.target.files[0].text()); if (!Array.isArray(d.products) || !Array.isArray(d.log)) throw 0; S = Object.assign({recipients: [], ejs: {}, sched: []}, d); fixIds(); save(); rlist(); S.sched = S.sched || []; slist(); msg('m-bk', 'Backup restored.'); }
   catch (x) { msg('m-bk', 'That file is not a valid backup.', 1); }
   e.target.value = '';
 };
@@ -317,13 +405,13 @@ $('s-days').onclick = e => { const v = e.target.dataset.d; if (v == null) return
 $('sadd').onclick = () => {
   if (!$('s-time').value) return msg('m-sch', 'Pick a time.', 1);
   if (!selDays.size) return msg('m-sch', 'Pick at least one day.', 1);
-  S.sched.push({id: Date.now(), type: 'alert', time: $('s-time').value, days: [...selDays], on: true, last: ''});
+  S.sched.push({id: uid(), type: 'alert', time: $('s-time').value, days: [...selDays], on: true, last: ''});
   save(); slist(); keepAwake(); msg('m-sch', 'Schedule added.');
 };
 $('madd').onclick = () => {
   const text = $('mtext').value.trim(), date = $('mdate').value, time = $('mtime').value;
   if (!text || !date || !time) return msg('m-sch', 'Enter the message, date and time.', 1);
-  S.sched.push({id: Date.now(), type: 'reminder', text, date, time, on: true, last: ''});
+  S.sched.push({id: uid(), type: 'reminder', text, date, time, on: true, last: ''});
   save(); slist(); keepAwake(); $('mtext').value = ''; msg('m-sch', 'Reminder added.');
 };
 function slist() {
@@ -338,6 +426,7 @@ $('sl').onchange = e => { const i = e.target.dataset.son; if (i != null) { S.sch
 $('sl').onclick = e => { const i = e.target.dataset.srm; if (i != null) { S.sched.splice(i, 1); save(); slist(); } };
 let busy = false;
 async function tick() {
+  if (localStorage.getItem('expiryTracker.runsched') === 'off') return;
   if (busy) return; busy = true;
   try {
     const now = new Date(), today = dkey(now);
@@ -388,6 +477,9 @@ $('camx').onclick = stopCam;
 $('cam1').onclick = () => scan(v => { $('bc').value = v; $('dt').focus(); if ($('dt').showPicker) try { $('dt').showPicker(); } catch (x) {} });
 $('cam2').onclick = () => scan(v => { $('cl').value = v; });
 
+setInterval(sync, 20000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });
+sync();
 focusBc();
 </script>
 </body></html>
