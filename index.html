@@ -39,6 +39,7 @@ td,th{padding:11px 4px;border-bottom:1px solid #f1f5f9;text-align:left;vertical-
 th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--m)}
 td img{width:42px;height:42px;object-fit:contain;border-radius:10px;background:#f8fafc}
 small{color:var(--m);font-size:12px}
+.x{width:34px;height:34px;padding:0;border:0;border-radius:11px;background:#fee2e2;color:#dc2626;font-size:16px;font-weight:800;cursor:pointer}
 .bd{display:inline-block;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
 .d{background:#ffe4e6;color:#be123c}.w{background:#fef3c7;color:#b45309}.o{background:#d1fae5;color:#047857}
 .sc{overflow-x:auto}
@@ -71,7 +72,7 @@ details summary{cursor:pointer;padding:6px 0}
 <div class="tools"><button class="b2" id="mail">✉️ Email alert</button><button class="b2" id="prev">👁 Preview email</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
 <input id="q" placeholder="Search item, description, location…" style="height:42px;margin-bottom:12px">
 <div class="msg" id="m-dash"></div>
-<div class="sc"><table><thead><tr><th style="width:50px"></th><th>Item</th><th style="width:118px;text-align:right">Expiry</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="sc"><table><thead><tr><th style="width:50px"></th><th>Item</th><th style="width:112px;text-align:right">Expiry</th><th style="width:40px"></th></tr></thead><tbody id="tb"></tbody></table></div>
 </section>
 
 <section id="db" hidden>
@@ -82,6 +83,7 @@ details summary{cursor:pointer;padding:6px 0}
 <label>Location (optional)</label><input id="p-loc">
 <label>Image URL (optional)</label><input id="p-img">
 <button class="go" id="padd">Save product</button>
+<button class="b2" id="pcancel" style="display:none;margin-top:10px">Cancel edit</button>
 <div class="msg" id="m-db"></div>
 <h2>Import / export</h2>
 <div class="tools"><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Import CSV<input type="file" id="pcsv" accept=".csv" hidden></label><button class="b2" id="pexp">Export CSV</button></div>
@@ -126,7 +128,7 @@ details summary{cursor:pointer;padding:6px 0}
 <div class="tools" style="margin-top:8px"><button class="b2" id="sy-gen">Generate key</button><button class="b2" id="sy-save">Connect</button><button class="b2" id="sy-link">Copy setup link</button><button class="b2" id="sy-off">Disconnect</button></div>
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
-<small>App version 7 (PIN + mobile design)</small>
+<small>App version 8 (delete + edit)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -284,9 +286,14 @@ function dash() {
     .filter(r => (r.code + ' ' + (r.p.desc || '') + ' ' + (r.p.loc || '')).toLowerCase().includes(q));
   $('tb').innerHTML = rows.map(r => `<tr><td>${r.p.img ? `<img src="${esc(r.p.img)}" alt="" loading="lazy">` : ''}</td>
 <td><b>${esc(r.code)}</b><br><small>${esc(r.p.desc)}</small></td>
-<td style="text-align:right"><span class="bd ${r.n <= 4 ? 'd' : r.n <= 7 ? 'w' : 'o'}">${r.n <= ALERT_DAYS ? 'Expiring Soon' : 'OK'}</span><br><small>${fmt(r.date)} · ${r.n}d${r.p.loc ? ' · ' + esc(r.p.loc) : ''}</small></td></tr>`).join('')
-    || '<tr><td colspan="3" style="text-align:center">No expiring items found.</td></tr>';
+<td style="text-align:right"><span class="bd ${r.n <= 4 ? 'd' : r.n <= 7 ? 'w' : 'o'}">${r.n <= ALERT_DAYS ? 'Expiring Soon' : 'OK'}</span><br><small>${fmt(r.date)} · ${r.n}d${r.p.loc ? ' · ' + esc(r.p.loc) : ''}</small></td><td style="text-align:right"><button class="x" data-x="${esc(r.id)}" title="Delete">✕</button></td></tr>`).join('')
+    || '<tr><td colspan="4" style="text-align:center">No expiring items found.</td></tr>';
 }
+$('tb').onclick = e => {
+  const id = e.target.dataset.x; if (!id) return;
+  const r = S.log.find(x => x.id === id); if (!r || !confirm('Delete ' + r.code + ' (' + fmt(r.date) + ') from the list?')) return;
+  S.log = S.log.filter(x => x.id !== id); save(); dash(); msg('m-dash', 'Item deleted.');
+};
 $('q').oninput = dash; $('ref').onclick = dash;
 $('dedupe').onclick = () => {
   const seen = new Set(), n = S.log.length;
@@ -331,19 +338,28 @@ $('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 
 $('padd').onclick = () => {
   const p = {code: $('p-code').value.trim(), barcode: $('p-bar').value.trim(), desc: $('p-desc').value.trim(), loc: $('p-loc').value.trim(), img: $('p-img').value.trim()};
   if (!p.code || !p.barcode) return msg('m-db', 'Both Item Code and Barcode are required.', 1);
-  upsert(p); save(); plist();
+  if (editing && editing !== p.code) { S.products = S.products.filter(x => x.code !== editing); S.log.forEach(r => { if (r.code === editing) r.code = p.code; }); }
+  upsert(p); save(); plist(); stopEdit();
   msg('m-db', 'Saved ' + p.code + ' to Products.');
   ['code','bar','desc','loc','img'].forEach(k => $('p-' + k).value = '');
 };
+let editing = null;
+function stopEdit() { editing = null; $('padd').textContent = 'Save product'; $('pcancel').style.display = 'none'; ['code','bar','desc','loc','img'].forEach(k => $('p-' + k).value = ''); }
+$('pcancel').onclick = () => { stopEdit(); msg('m-db', 'Edit cancelled.'); };
 function upsert(p) { const i = S.products.findIndex(x => x.code === p.code); if (i >= 0) S.products[i] = p; else S.products.push(p); }
 function plist() {
   const q = $('pq').value.toLowerCase();
   const l = S.products.filter(p => (p.code + p.barcode + p.desc).toLowerCase().includes(q));
   $('pcount').textContent = '(' + S.products.length + ')';
-  $('ptb').innerHTML = l.slice(0, 60).map(p => `<tr><td><b>${esc(p.code)}</b><br><small>${esc(p.desc)}</small></td><td><small>${esc(p.barcode)}</small></td><td><button class="b2" data-del="${esc(p.code)}">Delete</button></td></tr>`).join('') || '<tr><td>No products yet.</td></tr>';
+  $('ptb').innerHTML = l.slice(0, 60).map(p => `<tr><td><b>${esc(p.code)}</b><br><small>${esc(p.desc)}</small><br><small>${esc(p.barcode)}${p.loc ? ' · ' + esc(p.loc) : ''}</small></td><td style="width:84px"><div style="display:flex;flex-direction:column;gap:6px"><button class="b2" data-ed="${esc(p.code)}">Edit</button><button class="b2" data-del="${esc(p.code)}" style="background:#fee2e2;color:#dc2626">Delete</button></div></td></tr>`).join('') || '<tr><td>No products yet.</td></tr>';
 }
 $('pq').oninput = plist;
-$('ptb').onclick = e => { const c = e.target.dataset.del; if (c && confirm('Delete product ' + c + '?')) { S.products = S.products.filter(p => p.code !== c); save(); plist(); } };
+$('ptb').onclick = e => {
+  const ed = e.target.dataset.ed;
+  if (ed) { const p = S.products.find(x => x.code === ed); if (!p) return; editing = ed;
+    $('p-code').value = p.code; $('p-bar').value = p.barcode || ''; $('p-desc').value = p.desc || ''; $('p-loc').value = p.loc || ''; $('p-img').value = p.img || '';
+    $('padd').textContent = 'Update product'; $('pcancel').style.display = 'block'; msg('m-db', 'Editing ' + ed + '. Change the fields and press Update product.'); scrollTo({top: 0, behavior: 'smooth'}); return; }
+  const c = e.target.dataset.del; if (c && confirm('Delete product ' + c + '?')) { S.products = S.products.filter(p => p.code !== c); save(); plist(); } };
 function parseCSV(t) {
   const rows = []; let r = [], f = '', q = 0;
   for (let i = 0; i < t.length; i++) {
