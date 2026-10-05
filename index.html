@@ -1,47 +1,59 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><meta name="theme-color" content="#4f46e5">
 <title>Product Expiry Tracker</title>
 <style>
-:root{--p:#2563eb;--bg:#f8fafc;--t:#0f172a;--m:#64748b;--bd:#cbd5e1}
-*{box-sizing:border-box}
-body{margin:0;padding:12px;background:var(--bg);color:var(--t);font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+:root{--p:#4f46e5;--p2:#2563eb;--bg:#eef2f7;--t:#0f172a;--m:#64748b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;max-width:100%;overflow-x:hidden}
+body{background:radial-gradient(900px 360px at 50% -120px,#c7d2fe,transparent),var(--bg);color:var(--t);font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;padding:0 14px calc(100px + env(safe-area-inset-bottom));touch-action:manipulation;-webkit-text-size-adjust:100%}
 .wrap{max-width:560px;margin:0 auto}
-nav{display:flex;gap:4px;background:#e2e8f0;padding:4px;border-radius:14px;margin-bottom:14px}
-nav button{flex:1;border:0;background:none;padding:10px 2px;border-radius:10px;font-weight:600;color:var(--m);cursor:pointer}
-nav button.on{background:#fff;color:var(--p);box-shadow:0 2px 6px #0001}
-section{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:20px;box-shadow:0 10px 28px -10px #0f172a14}
+.top{display:flex;align-items:center;justify-content:space-between;padding:calc(16px + env(safe-area-inset-top)) 4px 14px;font-size:21px;font-weight:800;letter-spacing:-.02em}
+.top span{font-size:12px;color:var(--m);font-weight:600;letter-spacing:0}
+nav{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));max-width:536px;margin:0 auto;display:flex;gap:2px;padding:6px;background:#ffffffdd;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid #fff;border-radius:24px;box-shadow:0 12px 32px -8px #1e293b50;z-index:5}
+nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;padding:8px 2px;border-radius:18px;font-family:inherit;font-size:11px;font-weight:700;color:var(--m);cursor:pointer;transition:.2s}
+nav button i{font-style:normal;font-size:20px;line-height:1.2}
+nav button.on{background:linear-gradient(135deg,var(--p),var(--p2));color:#fff;box-shadow:0 8px 16px -6px #4f46e5aa}
+section{background:#fff;border-radius:26px;padding:22px 18px;box-shadow:0 18px 40px -18px #1e293b30,0 2px 6px #1e293b0a}
 section[hidden]{display:none}
-h1{font-size:18px;margin:0 0 14px}h2{font-size:15px;margin:22px 0 8px}
-label{display:block;font-size:12px;font-weight:700;color:var(--m);margin:12px 0 6px}
-input,textarea{width:100%;height:48px;padding:0 14px;border:2px solid var(--bd);border-radius:12px;font:inherit;background:#f8fafc}
-textarea{height:80px;padding:10px 14px}
-input:focus,textarea:focus{outline:0;border-color:var(--p);background:#fff}
-.row{display:flex;gap:8px}.row input{flex:1}
-button.b1,button.b2{height:44px;padding:0 14px;border-radius:12px;font-weight:700;cursor:pointer;border:1px solid var(--bd);background:#f1f5f9;color:var(--t)}
-button.go{width:100%;height:50px;margin-top:16px;background:var(--p);color:#fff;border:0;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer}
-button.red{background:#dc2626}
-button.b2{background:#eff6ff;color:var(--p);height:36px;font-size:12px}
-.tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
-.msg{margin-top:14px;padding:11px;border-radius:12px;text-align:center;font-weight:600;background:#f0fdf4;color:#15803d}
+h1{font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0 0 14px}
+h2{font-size:15px;font-weight:800;margin:26px 0 8px}
+label{display:block;font-size:11px;font-weight:800;color:var(--m);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 7px}
+input:not([type=checkbox]),textarea{display:block;width:100%;min-width:0;height:54px;padding:0 16px;border:2px solid transparent;border-radius:16px;background:#f1f5f9;font-family:inherit;font-size:16px;color:var(--t);-webkit-appearance:none;appearance:none}
+textarea{height:80px;padding:10px 16px}
+input:focus,textarea:focus{outline:0;border-color:var(--p);background:#fff;box-shadow:0 0 0 4px #4f46e51f}
+input[type=date],input[type=time]{text-align:left}
+.row{display:flex;gap:8px}.row>*{min-width:0}.row input{flex:1}
+button.b1{height:54px;min-width:54px;padding:0 16px;border:0;border-radius:16px;background:#eef2ff;color:var(--p);font-family:inherit;font-weight:700;font-size:15px;cursor:pointer}
+button.b2{height:40px;padding:0 14px;border:0;border-radius:12px;background:#eef2ff;color:var(--p);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer}
+button.go{display:block;width:100%;height:56px;margin-top:20px;border:0;border-radius:18px;background:linear-gradient(135deg,var(--p),var(--p2));color:#fff;font-family:inherit;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 14px 24px -10px #4f46e5bb}
+button.go:active,button.b1:active,button.b2:active{transform:scale(.98)}
+button.red{background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:0 14px 24px -10px #dc2626bb}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.msg{margin-top:14px;padding:12px;border-radius:14px;text-align:center;font-weight:700;background:#ecfdf5;color:#047857}
 .msg.e{background:#fef2f2;color:#b91c1c}.msg:empty{display:none}
 table{width:100%;border-collapse:collapse}
-td,th{padding:8px 6px;border-bottom:1px solid #f1f5f9;text-align:left;vertical-align:middle}
-th{background:#f1f5f9;color:var(--m)}
-td img{width:42px;height:42px;object-fit:contain;border-radius:6px}
-small{color:var(--m)}
-.bd{padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap}
-.d{background:#ffebe9;color:#cf222e}.w{background:#fff8c5;color:#9a6700}.o{background:#dafbe1;color:#1a7f37}
+#dash table{table-layout:fixed}
+td,th{padding:11px 4px;border-bottom:1px solid #f1f5f9;text-align:left;vertical-align:middle;word-break:break-word}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--m)}
+td img{width:42px;height:42px;object-fit:contain;border-radius:10px;background:#f8fafc}
+small{color:var(--m);font-size:12px}
+.bd{display:inline-block;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+.d{background:#ffe4e6;color:#be123c}.w{background:#fef3c7;color:#b45309}.o{background:#d1fae5;color:#047857}
 .sc{overflow-x:auto}
-.chip{flex:1;height:36px;padding:0;border-radius:10px;border:1px solid var(--bd);background:#f1f5f9;font-weight:700;font-size:12px;cursor:pointer}.chip.on{background:var(--p);color:#fff;border-color:var(--p)}
-#cam{position:fixed;inset:0;background:#000d;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9}
-#cam video{width:90%;max-width:480px;border-radius:14px}
-@media print{body{background:#fff;padding:0}nav,.tools,#q,.msg,section:not(#dash){display:none!important}section{border:0;box-shadow:none;padding:0}table{font-size:12pt}}
+.chip{flex:1;min-width:0;height:40px;padding:0;border-radius:12px;border:0;background:#f1f5f9;color:var(--m);font-family:inherit;font-weight:800;font-size:12px;cursor:pointer}.chip.on{background:var(--p);color:#fff}
+details summary{cursor:pointer;padding:6px 0}
+#cam,#pin{position:fixed;inset:0;background:#0f172acc;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20;padding:20px}
+#cam video{width:100%;max-width:480px;border-radius:20px}
+.pc{background:#fff;border-radius:26px;padding:24px;width:100%;max-width:340px}
+#pin-in{text-align:center;letter-spacing:.5em;font-size:24px}
+@media print{body{background:#fff;padding:0}nav,.top,.tools,#q,.msg,section:not(#dash){display:none!important}section{box-shadow:none;padding:0}}
 </style></head><body>
 <div class="wrap">
+<div class="top"><b>⏰ Expiry Tracker</b><span id="lk"></span></div>
 <nav>
-<button data-t="log" class="on">Log expiry</button><button data-t="dash">Dashboard</button><button data-t="db">Products</button><button data-t="tools">Tools</button>
+<button data-t="log" class="on"><i>📝</i>Log</button><button data-t="dash"><i>📊</i>Dashboard</button><button data-t="db"><i>📦</i>Products</button><button data-t="tools"><i>⚙️</i>Tools</button>
 </nav>
 
 <section id="log">
@@ -59,7 +71,7 @@ small{color:var(--m)}
 <div class="tools"><button class="b2" id="mail">✉️ Email alert</button><button class="b2" id="prev">👁 Preview email</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
 <input id="q" placeholder="Search item, description, location…" style="height:42px;margin-bottom:12px">
 <div class="msg" id="m-dash"></div>
-<div class="sc"><table><thead><tr><th></th><th>Item</th><th>Expiry</th><th>Days</th><th>Status</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="sc"><table><thead><tr><th style="width:50px"></th><th>Item</th><th style="width:118px;text-align:right">Expiry</th></tr></thead><tbody id="tb"></tbody></table></div>
 </section>
 
 <section id="db" hidden>
@@ -80,6 +92,7 @@ small{color:var(--m)}
 </section>
 
 <section id="tools" hidden>
+<div class="tools"><button class="b2" id="lock">🔒 Lock Products &amp; Tools</button></div>
 <h1>Clear records</h1>
 <label>Barcode / item code</label>
 <div class="row"><input id="cl" autocomplete="off" placeholder="Scan or type code"><button class="b1" id="cam2">📷</button></div>
@@ -113,13 +126,14 @@ small{color:var(--m)}
 <div class="tools" style="margin-top:8px"><button class="b2" id="sy-gen">Generate key</button><button class="b2" id="sy-save">Connect</button><button class="b2" id="sy-link">Copy setup link</button><button class="b2" id="sy-off">Disconnect</button></div>
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
-<small>App version 6 (sync + single email)</small>
+<small>App version 7 (PIN + mobile design)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
 </section>
 </div>
 
+<div id="pin"><div class="pc"><h1>Enter PIN</h1><input id="pin-in" type="password" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="off"><div class="msg" id="m-pin"></div><div class="row" style="margin-top:14px"><button class="b1" id="pin-x">Cancel</button><button class="go" id="pin-ok" style="margin:0;height:54px">Unlock</button></div></div></div>
 <div id="cam"><video id="vid" playsinline muted></video><button class="b1" id="camx">Cancel</button></div>
 
 <script>
@@ -228,7 +242,19 @@ $('sy-run').checked = localStorage.getItem('expiryTracker.runsched') !== 'off';
 $('sy-run').onchange = e => localStorage.setItem('expiryTracker.runsched', e.target.checked ? 'on' : 'off');
 
 // ---- tabs ----
+const PIN = '1900', LOCKED = ['db', 'tools'];
+let want = null;
+const isOpen = () => sessionStorage.getItem('unlocked') === '1';
+function lockUi() { $('lk').textContent = isOpen() ? '🔓 Unlocked' : ''; }
+$('pin-ok').onclick = () => {
+  if ($('pin-in').value === PIN) { sessionStorage.setItem('unlocked', '1'); $('pin').style.display = 'none'; lockUi(); tab(want || 'log'); }
+  else { msg('m-pin', 'Wrong PIN.', 1); $('pin-in').value = ''; }
+};
+$('pin-in').onkeydown = e => { if (e.key === 'Enter') $('pin-ok').onclick(); };
+$('pin-x').onclick = () => { $('pin').style.display = 'none'; };
+$('lock').onclick = () => { sessionStorage.removeItem('unlocked'); lockUi(); tab('log'); };
 function tab(t) {
+  if (LOCKED.includes(t) && !isOpen()) { want = t; msg('m-pin', '', 0); $('pin-in').value = ''; $('pin').style.display = 'flex'; $('pin-in').focus(); return; }
   document.querySelectorAll('section').forEach(s => s.hidden = s.id !== t);
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   if (t === 'dash') dash(); if (t === 'db') plist(); if (t === 'log') focusBc();
@@ -257,9 +283,9 @@ function dash() {
   const rows = S.log.map(r => ({...r, p: byCode(r.code), n: days(r.date)}))
     .filter(r => (r.code + ' ' + (r.p.desc || '') + ' ' + (r.p.loc || '')).toLowerCase().includes(q));
   $('tb').innerHTML = rows.map(r => `<tr><td>${r.p.img ? `<img src="${esc(r.p.img)}" alt="" loading="lazy">` : ''}</td>
-<td><b>${esc(r.code)}</b><br><small>${esc(r.p.desc)}</small></td><td>${fmt(r.date)}</td><td>${r.n}d</td>
-<td><span class="bd ${r.n <= 4 ? 'd' : r.n <= 7 ? 'w' : 'o'}">${r.n <= ALERT_DAYS ? 'Expiring Soon' : 'OK'}</span><br><small>${esc(r.p.loc)}</small></td></tr>`).join('')
-    || '<tr><td colspan="5" style="text-align:center">No expiring items found.</td></tr>';
+<td><b>${esc(r.code)}</b><br><small>${esc(r.p.desc)}</small></td>
+<td style="text-align:right"><span class="bd ${r.n <= 4 ? 'd' : r.n <= 7 ? 'w' : 'o'}">${r.n <= ALERT_DAYS ? 'Expiring Soon' : 'OK'}</span><br><small>${fmt(r.date)} · ${r.n}d${r.p.loc ? ' · ' + esc(r.p.loc) : ''}</small></td></tr>`).join('')
+    || '<tr><td colspan="3" style="text-align:center">No expiring items found.</td></tr>';
 }
 $('q').oninput = dash; $('ref').onclick = dash;
 $('dedupe').onclick = () => {
