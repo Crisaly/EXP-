@@ -102,7 +102,7 @@ details summary{cursor:pointer;padding:6px 0}
 <div class="tools"><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Import CSV<input type="file" id="pcsv" accept=".csv" hidden></label><button class="b2" id="pexp">Export CSV</button></div>
 <small>CSV columns like your DATA sheet: Item Code, Barcode, Description, (blank), Image URL, Location.</small>
 <h2>Product list <small id="pcount"></small></h2>
-<div class="ptools"><button class="b2 dd" id="pdup">🧹 Remove duplicates</button></div>
+<div class="ptools"><button class="b2 dd" id="pdup">🧹 Remove duplicates</button><button class="b2 dd" id="pfix">🔧 Fix swapped data</button></div>
 <input id="pq" placeholder="Search products…" style="height:42px;margin-bottom:8px">
 <div id="ptb"></div>
 </section>
@@ -144,7 +144,7 @@ details summary{cursor:pointer;padding:6px 0}
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
 </details>
-<small>App version 11 (product list design)</small>
+<small>App version 12 (product list design)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -172,6 +172,19 @@ function pk(p) { // identity of a product = item code + barcode + description (a
   const t = nz(p.code) + '|' + nz(p.barcode) + '|' + nz(p.desc); let a = 2166136261, b = 5381;
   for (let i = 0; i < t.length; i++) { a = Math.imul(a ^ t.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ t.charCodeAt(i); }
   return (a >>> 0).toString(36) + (b >>> 0).toString(36) + t.length.toString(36);
+}
+function fixP(p) { // repair wrong CSV columns: image URL in another field, code/barcode swapped
+  const o = Object.assign({}, p), isU = v => /^https?:\/\//i.test(String(v || '').trim());
+  ['code', 'barcode', 'desc', 'loc'].forEach(k => { if (isU(o[k])) { if (!o.img) o.img = String(o[k]).trim(); o[k] = ''; } });
+  const c = String(o.code || '').trim(), b = String(o.barcode || '').trim();
+  if (c.length > 6 && b && b.length <= 6) { o.code = b; o.barcode = c; }
+  return o;
+}
+function fixAll() { // returns number of products changed
+  let n = 0; const map = {};
+  S.products = S.products.map(p => { const q = fixP(p); if (JSON.stringify(q) !== JSON.stringify(p)) { n++; if (q.code !== p.code) map[p.code] = q.code; } return q; });
+  if (n) { S.log.forEach(r => { if (map[r.code]) r.code = map[r.code]; }); dedupeProducts(); }
+  return n;
 }
 function dupCount() { return S.products.length - new Set(S.products.map(pk)).size; }
 function dedupeProducts() { const m = new Map(); S.products.forEach(p => { const k = pk(p); if (!m.has(k)) m.set(k, p); }); const n = S.products.length - m.size; if (n) S.products = [...m.values()]; return n; }
@@ -385,6 +398,12 @@ function plist() {
   if (l.length > 100) $('ptb').insertAdjacentHTML('beforeend', '<small style="display:block;padding:12px 0">Showing 100 of ' + l.length + '. Use search to find others.</small>');
 }
 $('pq').oninput = plist;
+$('pfix').onclick = () => {
+  const n = S.products.filter(p => JSON.stringify(fixP(p)) !== JSON.stringify(p)).length;
+  if (!n) return msg('m-db', 'Nothing to fix. No swapped code/barcode or image links in the wrong field.');
+  if (!confirm('Fix ' + n + ' product(s)? Image links in Location move to Image, and a long code in Code swaps with the short barcode.')) return;
+  const r = fixAll(); save(); plist(); msg('m-db', 'Fixed ' + r + ' product(s).');
+};
 $('pdup').onclick = () => {
   const n = dupCount();
   if (!n) return msg('m-db', 'No duplicates found. A duplicate needs the same item code, barcode AND description.');
@@ -416,7 +435,7 @@ $('pcsv').onchange = async e => {
   const rows = parseCSV(await f.text()).filter(r => r[0] && r[0].trim());
   if (rows.length && /item/i.test(rows[0][0])) rows.shift();
   const before = S.products.length;
-  addProducts(rows.map(r => ({code: r[0].trim(), barcode: (r[1] || '').trim(), desc: (r[2] || '').trim(), img: (r[4] || '').trim(), loc: (r[5] || '').trim()})));
+  addProducts(rows.map(r => fixP({code: r[0].trim(), barcode: (r[1] || '').trim(), desc: (r[2] || '').trim(), img: (r[4] || '').trim(), loc: (r[5] || '').trim()})));
   save(); plist(); msg('m-db', 'Read ' + rows.length + ' rows: ' + (S.products.length - before) + ' new, ' + (rows.length - (S.products.length - before)) + ' already existed or were identical duplicates.'); e.target.value = '';
 };
 const dl = (name, text, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); };
