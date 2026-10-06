@@ -124,13 +124,14 @@ details summary{cursor:pointer;padding:6px 0}
 <div id="sl"></div>
 <div class="msg" id="m-sch"></div>
 <small>Schedules run only while this page is open on a device that is awake. Keep it open on the store computer or tablet.</small>
-<h2>Sync across devices</h2>
+<details id="syncbox" style="margin-top:24px"><summary><h2 style="display:inline;margin:0">Sync across devices</h2></summary>
 <small>Free Firebase Realtime Database keeps every phone and computer on the same data. Paste the database URL and a secret key, press Connect, then use "Copy setup link" on your other devices.</small>
 <input id="sy-url" placeholder="https://your-project-default-rtdb.firebaseio.com" style="margin-top:8px">
 <input id="sy-key" placeholder="Secret store key (8+ characters)" style="margin-top:8px">
 <div class="tools" style="margin-top:8px"><button class="b2" id="sy-gen">Generate key</button><button class="b2" id="sy-save">Connect</button><button class="b2" id="sy-link">Copy setup link</button><button class="b2" id="sy-off">Disconnect</button></div>
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
+</details>
 <small>App version 8 (delete + edit)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
