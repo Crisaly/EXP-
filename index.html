@@ -102,12 +102,13 @@ details summary{cursor:pointer;padding:6px 0}
 <div class="row"><input id="cl" autocomplete="off" placeholder="Scan or type code"><button class="b1" id="cam2">📷</button></div>
 <button class="go red" id="clear">Clear records</button>
 <div class="msg" id="m-cl"></div>
-<h2>Email recipients</h2>
+<details id="rcpt" style="margin-top:24px"><summary><h2 style="display:inline;margin:0">Email recipients</h2> <small id="rcount"></small></summary>
 <div class="row"><input id="r-name" placeholder="Name"><input id="r-mail" type="email" placeholder="Email"><button class="b1" id="radd">Add</button></div>
 <small>Tick the people who should receive alerts. Saved on this device only.</small>
 <div id="rl" style="margin-top:6px"></div>
 <button class="go" id="etest" style="height:44px;margin-top:10px">Send test email</button>
 <div class="msg" id="m-em"></div>
+</details>
 <details style="margin-top:12px"><summary><b>Sending setup (EmailJS, free)</b></summary>
 <small>At emailjs.com add an email service and a template with To email = {{to_email}}, Subject = {{subject}}, and in the Code editor set the content to just {{{message_html}}} (three braces). That gives the designed email with pictures. Paste the IDs here. Without this, emails open in your mail app instead of sending directly.</small>
 <input id="j-svc" placeholder="Service ID" style="margin-top:8px"><input id="j-tpl" placeholder="Template ID" style="margin-top:8px"><input id="j-key" placeholder="Public key" style="margin-top:8px"></details>
@@ -399,6 +400,7 @@ $('clear').onclick = () => {
 
 // ---- email list + backup ----
 function rlist() {
+  $('rcount').textContent = '(' + S.recipients.filter(r => r.on).length + ' selected)';
   $('rl').innerHTML = S.recipients.map((r, i) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9"><input type="checkbox" data-on="${i}" ${r.on ? 'checked' : ''} style="width:22px;height:22px;flex:none"><span style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(r.name) || '–'}<br><small>${esc(r.email)}</small></span><button class="b2" data-rm="${i}">Remove</button></div>`).join('') || '<small>No recipients yet.</small>';
 }
 $('radd').onclick = () => {
