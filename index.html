@@ -41,6 +41,17 @@ td,th{padding:11px 4px;border-bottom:1px solid #f1f5f9;text-align:left;vertical-
 th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--m)}
 td img{width:42px;height:42px;object-fit:contain;border-radius:10px;background:#f8fafc}
 small{color:var(--m);font-size:12px}
+.pr{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid #e2e8f0}
+.pr:last-child{border-bottom:0}
+.pr img,.ph{width:60px;height:60px;flex:none;border-radius:16px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;box-shadow:0 2px 6px #1e293b12}
+.ph{display:flex;align-items:center;justify-content:center;font-size:24px;background:#f1f5f9}
+.pi{flex:1;min-width:0}.pi b{display:block;font-size:15px;font-weight:800;line-height:1.25;margin-bottom:4px;word-break:break-word;color:var(--t)}
+.pi small{display:block;line-height:1.35}
+.pb{display:flex;flex-direction:column;gap:8px;flex:none}.pb .b2{height:34px;min-width:62px;padding:0 12px;border-radius:12px;font-weight:800}
+.pb .ed{background:#eef2ff;color:#2563eb}.pb .dl{background:#fee2e2;color:#dc2626}
+.ptools{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.ptools .b2.dd{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+.ptools .b2.dd:disabled{opacity:.55}
 .x{width:34px;height:34px;padding:0;border:0;border-radius:11px;background:#fee2e2;color:#dc2626;font-size:16px;font-weight:800;cursor:pointer}
 .bd{display:inline-block;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
 .d{background:#ffe4e6;color:#be123c}.w{background:#fef3c7;color:#b45309}.o{background:#d1fae5;color:#047857}
@@ -91,8 +102,9 @@ details summary{cursor:pointer;padding:6px 0}
 <div class="tools"><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Import CSV<input type="file" id="pcsv" accept=".csv" hidden></label><button class="b2" id="pexp">Export CSV</button></div>
 <small>CSV columns like your DATA sheet: Item Code, Barcode, Description, (blank), Image URL, Location.</small>
 <h2>Product list <small id="pcount"></small></h2>
+<div class="ptools"><button class="b2 dd" id="pdup">🧹 Remove duplicates</button></div>
 <input id="pq" placeholder="Search products…" style="height:42px;margin-bottom:8px">
-<div class="sc"><table><tbody id="ptb"></tbody></table></div>
+<div id="ptb"></div>
 </section>
 
 <section id="tools" hidden>
@@ -132,7 +144,7 @@ details summary{cursor:pointer;padding:6px 0}
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
 </details>
-<small>App version 9 (product duplicates)</small>
+<small>App version 11 (product list design)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -155,15 +167,16 @@ try { Object.assign(S, JSON.parse(localStorage.getItem(K)) || {}); } catch (e) {
 if (typeof S.emails === 'string' && !S.recipients.length) S.recipients = S.emails.split(/[\s,;]+/).filter(Boolean).map(e => ({name: '', email: e, on: true}));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 function fixIds() { S.log.forEach(r => r.id = r.id || uid()); S.recipients.forEach(r => r.id = r.id || uid()); S.sched.forEach(r => r.id = String(r.id || uid())); }
-const nz = v => String(v == null ? '' : v).trim().toLowerCase();
+const nz = v => String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, ' ');
 function pk(p) { // identity of a product = item code + barcode + description (all three)
   const t = nz(p.code) + '|' + nz(p.barcode) + '|' + nz(p.desc); let a = 2166136261, b = 5381;
   for (let i = 0; i < t.length; i++) { a = Math.imul(a ^ t.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ t.charCodeAt(i); }
   return (a >>> 0).toString(36) + (b >>> 0).toString(36) + t.length.toString(36);
 }
+function dupCount() { return S.products.length - new Set(S.products.map(pk)).size; }
 function dedupeProducts() { const m = new Map(); S.products.forEach(p => { const k = pk(p); if (!m.has(k)) m.set(k, p); }); const n = S.products.length - m.size; if (n) S.products = [...m.values()]; return n; }
 function addProducts(list) { const m = new Map(S.products.map(p => [pk(p), p])); list.forEach(p => m.set(pk(p), p)); S.products = [...m.values()]; }
-fixIds(); dedupeProducts();
+fixIds();
 const saveLocal = () => localStorage.setItem(K, JSON.stringify(S));
 const save = () => { saveLocal(); queue(); };
 const $ = id => document.getElementById(id);
@@ -226,8 +239,8 @@ async function sync() {
     if (!first && ts == null) { setBase({}); await push(); }
     else if (first || ts !== seenTs) {
       const d = await (await fetch(root() + '.json')).json() || {}, rf = remoteFlat(d);
-      if (first) { Object.assign(S, stateOf({...rf, ...flatOf(S)})); dedupeProducts(); setBase(rf); await push(); seenTs = null; saveLocal(); refresh(); }
-      else if (!dirty()) { Object.assign(S, stateOf(rf)); dedupeProducts(); const f = flatOf(S), nb = {...f}; Object.keys(rf).forEach(k => { if (!(k in f)) nb[k] = rf[k]; }); setBase(nb); seenTs = ts; saveLocal(); refresh(); }
+      if (first) { Object.assign(S, stateOf({...rf, ...flatOf(S)})); setBase(rf); await push(); seenTs = null; saveLocal(); refresh(); }
+      else if (!dirty()) { Object.assign(S, stateOf(rf)); const f = flatOf(S), nb = {...f}; Object.keys(rf).forEach(k => { if (!(k in f)) nb[k] = rf[k]; }); setBase(nb); seenTs = ts; saveLocal(); refresh(); }
     }
     msg('m-sy', 'Synced ' + new Date().toLocaleTimeString());
   } catch (e) { msg('m-sy', 'Sync problem: ' + e.message, 1); }
@@ -364,9 +377,20 @@ function plist() {
   const q = $('pq').value.toLowerCase();
   const l = S.products.filter(p => (p.code + p.barcode + p.desc).toLowerCase().includes(q));
   $('pcount').textContent = '(' + S.products.length + ')';
-  $('ptb').innerHTML = l.slice(0, 60).map(p => `<tr><td><b>${esc(p.code)}</b><br><small>${esc(p.desc)}</small><br><small>${esc(p.barcode)}${p.loc ? ' · ' + esc(p.loc) : ''}</small></td><td style="width:84px"><div style="display:flex;flex-direction:column;gap:6px"><button class="b2" data-ed="${pk(p)}">Edit</button><button class="b2" data-del="${pk(p)}" style="background:#fee2e2;color:#dc2626">Delete</button></div></td></tr>`).join('') || '<tr><td>No products yet.</td></tr>';
+  const dn = dupCount(); $('pdup').textContent = dn ? '🧹 Remove duplicates (' + dn + ')' : '🧹 Remove duplicates';
+  $('ptb').innerHTML = l.slice(0, 100).map(p => `<div class="pr">${p.img ? `<img src="${esc(p.img)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=ph>📦</div>'">` : '<div class="ph">📦</div>'}
+<div class="pi"><b>${esc(p.desc || p.code)}</b><small>Barcode ${esc(p.barcode)} · Code ${esc(p.code)}${p.loc ? ' · Loc ' + esc(p.loc) : ''}</small></div>
+<div class="pb"><button class="b2 ed" data-ed="${pk(p)}">Edit</button><button class="b2 dl" data-del="${pk(p)}">Del</button></div></div>`).join('')
+    || '<small>No products yet.</small>';
+  if (l.length > 100) $('ptb').insertAdjacentHTML('beforeend', '<small style="display:block;padding:12px 0">Showing 100 of ' + l.length + '. Use search to find others.</small>');
 }
 $('pq').oninput = plist;
+$('pdup').onclick = () => {
+  const n = dupCount();
+  if (!n) return msg('m-db', 'No duplicates found. A duplicate needs the same item code, barcode AND description.');
+  if (!confirm('Remove ' + n + ' duplicate product(s)? Only products with the same item code, barcode and description are removed. One copy of each stays.')) return;
+  const r = dedupeProducts(); save(); plist(); msg('m-db', 'Removed ' + r + ' duplicate(s).');
+};
 $('ptb').onclick = e => {
   const ed = e.target.dataset.ed;
   if (ed) { const p = S.products.find(x => pk(x) === ed); if (!p) return; editing = ed;
