@@ -132,7 +132,7 @@ details summary{cursor:pointer;padding:6px 0}
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
 </details>
-<small>App version 8 (delete + edit)</small>
+<small>App version 9 (product duplicates)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -155,7 +155,15 @@ try { Object.assign(S, JSON.parse(localStorage.getItem(K)) || {}); } catch (e) {
 if (typeof S.emails === 'string' && !S.recipients.length) S.recipients = S.emails.split(/[\s,;]+/).filter(Boolean).map(e => ({name: '', email: e, on: true}));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 function fixIds() { S.log.forEach(r => r.id = r.id || uid()); S.recipients.forEach(r => r.id = r.id || uid()); S.sched.forEach(r => r.id = String(r.id || uid())); }
-fixIds();
+const nz = v => String(v == null ? '' : v).trim().toLowerCase();
+function pk(p) { // identity of a product = item code + barcode + description (all three)
+  const t = nz(p.code) + '|' + nz(p.barcode) + '|' + nz(p.desc); let a = 2166136261, b = 5381;
+  for (let i = 0; i < t.length; i++) { a = Math.imul(a ^ t.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ t.charCodeAt(i); }
+  return (a >>> 0).toString(36) + (b >>> 0).toString(36) + t.length.toString(36);
+}
+function dedupeProducts() { const m = new Map(); S.products.forEach(p => { const k = pk(p); if (!m.has(k)) m.set(k, p); }); const n = S.products.length - m.size; if (n) S.products = [...m.values()]; return n; }
+function addProducts(list) { const m = new Map(S.products.map(p => [pk(p), p])); list.forEach(p => m.set(pk(p), p)); S.products = [...m.values()]; }
+fixIds(); dedupeProducts();
 const saveLocal = () => localStorage.setItem(K, JSON.stringify(S));
 const save = () => { saveLocal(); queue(); };
 const $ = id => document.getElementById(id);
@@ -181,7 +189,7 @@ const setBase = b => { base = b; try { localStorage.setItem(BK, JSON.stringify(b
 function flatOf(o) {
   const m = {};
   o.log.forEach(r => m['log/' + r.id] = JSON.stringify(r));
-  o.products.forEach(p => m['products/' + sk(p.code)] = JSON.stringify(p));
+  o.products.forEach(p => m['products/' + pk(p)] = JSON.stringify(p));
   o.recipients.forEach(r => m['rec/' + r.id] = JSON.stringify(r));
   o.sched.forEach(r => m['sched/' + r.id] = JSON.stringify(r));
   if (o.ejs && Object.keys(o.ejs).length) m.ejs = JSON.stringify(o.ejs);
@@ -218,8 +226,8 @@ async function sync() {
     if (!first && ts == null) { setBase({}); await push(); }
     else if (first || ts !== seenTs) {
       const d = await (await fetch(root() + '.json')).json() || {}, rf = remoteFlat(d);
-      if (first) { Object.assign(S, stateOf({...rf, ...flatOf(S)})); setBase(rf); await push(); seenTs = null; saveLocal(); refresh(); }
-      else if (!dirty()) { Object.assign(S, stateOf(rf)); setBase(flatOf(S)); seenTs = ts; saveLocal(); refresh(); }
+      if (first) { Object.assign(S, stateOf({...rf, ...flatOf(S)})); dedupeProducts(); setBase(rf); await push(); seenTs = null; saveLocal(); refresh(); }
+      else if (!dirty()) { Object.assign(S, stateOf(rf)); dedupeProducts(); const f = flatOf(S), nb = {...f}; Object.keys(rf).forEach(k => { if (!(k in f)) nb[k] = rf[k]; }); setBase(nb); seenTs = ts; saveLocal(); refresh(); }
     }
     msg('m-sy', 'Synced ' + new Date().toLocaleTimeString());
   } catch (e) { msg('m-sy', 'Sync problem: ' + e.message, 1); }
@@ -342,28 +350,30 @@ $('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 
 $('padd').onclick = () => {
   const p = {code: $('p-code').value.trim(), barcode: $('p-bar').value.trim(), desc: $('p-desc').value.trim(), loc: $('p-loc').value.trim(), img: $('p-img').value.trim()};
   if (!p.code || !p.barcode) return msg('m-db', 'Both Item Code and Barcode are required.', 1);
-  if (editing && editing !== p.code) { S.products = S.products.filter(x => x.code !== editing); S.log.forEach(r => { if (r.code === editing) r.code = p.code; }); }
-  upsert(p); save(); plist(); stopEdit();
+  if (editing) { const old = S.products.find(x => pk(x) === editing); S.products = S.products.filter(x => pk(x) !== editing);
+    if (old && old.code !== p.code && !S.products.some(x => x.code === old.code)) S.log.forEach(r => { if (r.code === old.code) r.code = p.code; }); }
+  addProducts([p]); save(); plist(); stopEdit();
   msg('m-db', 'Saved ' + p.code + ' to Products.');
   ['code','bar','desc','loc','img'].forEach(k => $('p-' + k).value = '');
 };
 let editing = null;
 function stopEdit() { editing = null; $('padd').textContent = 'Save product'; $('pcancel').style.display = 'none'; ['code','bar','desc','loc','img'].forEach(k => $('p-' + k).value = ''); }
 $('pcancel').onclick = () => { stopEdit(); msg('m-db', 'Edit cancelled.'); };
-function upsert(p) { const i = S.products.findIndex(x => x.code === p.code); if (i >= 0) S.products[i] = p; else S.products.push(p); }
+
 function plist() {
   const q = $('pq').value.toLowerCase();
   const l = S.products.filter(p => (p.code + p.barcode + p.desc).toLowerCase().includes(q));
   $('pcount').textContent = '(' + S.products.length + ')';
-  $('ptb').innerHTML = l.slice(0, 60).map(p => `<tr><td><b>${esc(p.code)}</b><br><small>${esc(p.desc)}</small><br><small>${esc(p.barcode)}${p.loc ? ' · ' + esc(p.loc) : ''}</small></td><td style="width:84px"><div style="display:flex;flex-direction:column;gap:6px"><button class="b2" data-ed="${esc(p.code)}">Edit</button><button class="b2" data-del="${esc(p.code)}" style="background:#fee2e2;color:#dc2626">Delete</button></div></td></tr>`).join('') || '<tr><td>No products yet.</td></tr>';
+  $('ptb').innerHTML = l.slice(0, 60).map(p => `<tr><td><b>${esc(p.code)}</b><br><small>${esc(p.desc)}</small><br><small>${esc(p.barcode)}${p.loc ? ' · ' + esc(p.loc) : ''}</small></td><td style="width:84px"><div style="display:flex;flex-direction:column;gap:6px"><button class="b2" data-ed="${pk(p)}">Edit</button><button class="b2" data-del="${pk(p)}" style="background:#fee2e2;color:#dc2626">Delete</button></div></td></tr>`).join('') || '<tr><td>No products yet.</td></tr>';
 }
 $('pq').oninput = plist;
 $('ptb').onclick = e => {
   const ed = e.target.dataset.ed;
-  if (ed) { const p = S.products.find(x => x.code === ed); if (!p) return; editing = ed;
+  if (ed) { const p = S.products.find(x => pk(x) === ed); if (!p) return; editing = ed;
     $('p-code').value = p.code; $('p-bar').value = p.barcode || ''; $('p-desc').value = p.desc || ''; $('p-loc').value = p.loc || ''; $('p-img').value = p.img || '';
     $('padd').textContent = 'Update product'; $('pcancel').style.display = 'block'; msg('m-db', 'Editing ' + ed + '. Change the fields and press Update product.'); scrollTo({top: 0, behavior: 'smooth'}); return; }
-  const c = e.target.dataset.del; if (c && confirm('Delete product ' + c + '?')) { S.products = S.products.filter(p => p.code !== c); save(); plist(); } };
+  const c = e.target.dataset.del; const q = c && S.products.find(p => pk(p) === c);
+  if (q && confirm('Delete product ' + q.code + ' – ' + q.desc + '?')) { S.products = S.products.filter(p => pk(p) !== c); save(); plist(); } };
 function parseCSV(t) {
   const rows = []; let r = [], f = '', q = 0;
   for (let i = 0; i < t.length; i++) {
@@ -381,8 +391,9 @@ $('pcsv').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   const rows = parseCSV(await f.text()).filter(r => r[0] && r[0].trim());
   if (rows.length && /item/i.test(rows[0][0])) rows.shift();
-  rows.forEach(r => upsert({code: r[0].trim(), barcode: (r[1] || '').trim(), desc: (r[2] || '').trim(), img: (r[4] || '').trim(), loc: (r[5] || '').trim()}));
-  save(); plist(); msg('m-db', 'Imported ' + rows.length + ' products.'); e.target.value = '';
+  const before = S.products.length;
+  addProducts(rows.map(r => ({code: r[0].trim(), barcode: (r[1] || '').trim(), desc: (r[2] || '').trim(), img: (r[4] || '').trim(), loc: (r[5] || '').trim()})));
+  save(); plist(); msg('m-db', 'Read ' + rows.length + ' rows: ' + (S.products.length - before) + ' new, ' + (rows.length - (S.products.length - before)) + ' already existed or were identical duplicates.'); e.target.value = '';
 };
 const dl = (name, text, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); };
 $('pexp').onclick = () => {
