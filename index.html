@@ -41,17 +41,11 @@ td,th{padding:11px 4px;border-bottom:1px solid #f1f5f9;text-align:left;vertical-
 th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--m)}
 td img{width:42px;height:42px;object-fit:contain;border-radius:10px;background:#f8fafc}
 small{color:var(--m);font-size:12px}
-.pr{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid #e2e8f0}
-.pr:last-child{border-bottom:0}
-.pr img,.ph{width:60px;height:60px;flex:none;border-radius:16px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;box-shadow:0 2px 6px #1e293b12}
-.ph{display:flex;align-items:center;justify-content:center;font-size:24px;background:#f1f5f9}
-.pi{flex:1;min-width:0}.pi b{display:block;font-size:15px;font-weight:800;line-height:1.25;margin-bottom:4px;word-break:break-word;color:var(--t)}
-.pi small{display:block;line-height:1.35}
-.pb{display:flex;flex-direction:column;gap:8px;flex:none}.pb .b2{height:34px;min-width:62px;padding:0 12px;border-radius:12px;font-weight:800}
-.pb .ed{background:#eef2ff;color:#2563eb}.pb .dl{background:#fee2e2;color:#dc2626}
-.ptools{display:flex;gap:8px;align-items:center;margin-bottom:10px}
-.ptools .b2.dd{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
-.ptools .b2.dd:disabled{opacity:.55}
+.pr{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #eef2f7}
+.pr img,.ph{width:56px;height:56px;flex:none;border-radius:16px;object-fit:contain;background:#fff;border:1px solid #e2e8f0}
+.ph{display:flex;align-items:center;justify-content:center;font-size:22px;background:#f1f5f9}
+.pi{flex:1;min-width:0}.pi b{display:block;font-size:14px;line-height:1.25;margin-bottom:3px;word-break:break-word}
+.pb{display:flex;flex-direction:column;gap:6px;flex:none}.pb .b2{height:34px;min-width:64px;padding:0 12px}
 .x{width:34px;height:34px;padding:0;border:0;border-radius:11px;background:#fee2e2;color:#dc2626;font-size:16px;font-weight:800;cursor:pointer}
 .bd{display:inline-block;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
 .d{background:#ffe4e6;color:#be123c}.w{background:#fef3c7;color:#b45309}.o{background:#d1fae5;color:#047857}
@@ -74,6 +68,7 @@ details summary{cursor:pointer;padding:6px 0}
 <h1>Quick add</h1>
 <label for="bc">Barcode / item code</label>
 <div class="row"><input id="bc" inputmode="none" autocomplete="off" placeholder="Scan or type code"><button class="b1" id="cam1" title="Camera">📷</button><button class="b1" id="kb" title="Keyboard">⌨️</button></div>
+<small id="bc-info" style="display:block;margin-top:8px;font-weight:700;min-height:16px"></small>
 <label for="dt">Expiration date</label>
 <input type="date" id="dt">
 <button class="go" id="save">Save</button>
@@ -102,7 +97,7 @@ details summary{cursor:pointer;padding:6px 0}
 <div class="tools"><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Import CSV<input type="file" id="pcsv" accept=".csv" hidden></label><button class="b2" id="pexp">Export CSV</button></div>
 <small>CSV columns like your DATA sheet: Item Code, Barcode, Description, (blank), Image URL, Location.</small>
 <h2>Product list <small id="pcount"></small></h2>
-<div class="ptools"><button class="b2 dd" id="pdup">🧹 Remove duplicates</button><button class="b2 dd" id="pfix">🔧 Fix swapped data</button></div>
+<div class="tools"><button class="b2" id="pdup">Remove duplicates</button></div>
 <input id="pq" placeholder="Search products…" style="height:42px;margin-bottom:8px">
 <div id="ptb"></div>
 </section>
@@ -144,7 +139,7 @@ details summary{cursor:pointer;padding:6px 0}
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
 </details>
-<small>App version 12 (product list design)</small>
+<small>App version 11 (auto date)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -172,19 +167,6 @@ function pk(p) { // identity of a product = item code + barcode + description (a
   const t = nz(p.code) + '|' + nz(p.barcode) + '|' + nz(p.desc); let a = 2166136261, b = 5381;
   for (let i = 0; i < t.length; i++) { a = Math.imul(a ^ t.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ t.charCodeAt(i); }
   return (a >>> 0).toString(36) + (b >>> 0).toString(36) + t.length.toString(36);
-}
-function fixP(p) { // repair wrong CSV columns: image URL in another field, code/barcode swapped
-  const o = Object.assign({}, p), isU = v => /^https?:\/\//i.test(String(v || '').trim());
-  ['code', 'barcode', 'desc', 'loc'].forEach(k => { if (isU(o[k])) { if (!o.img) o.img = String(o[k]).trim(); o[k] = ''; } });
-  const c = String(o.code || '').trim(), b = String(o.barcode || '').trim();
-  if (c.length > 6 && b && b.length <= 6) { o.code = b; o.barcode = c; }
-  return o;
-}
-function fixAll() { // returns number of products changed
-  let n = 0; const map = {};
-  S.products = S.products.map(p => { const q = fixP(p); if (JSON.stringify(q) !== JSON.stringify(p)) { n++; if (q.code !== p.code) map[p.code] = q.code; } return q; });
-  if (n) { S.log.forEach(r => { if (map[r.code]) r.code = map[r.code]; }); dedupeProducts(); }
-  return n;
 }
 function dupCount() { return S.products.length - new Set(S.products.map(pk)).size; }
 function dedupeProducts() { const m = new Map(); S.products.forEach(p => { const k = pk(p); if (!m.has(k)) m.set(k, p); }); const n = S.products.length - m.size; if (n) S.products = [...m.values()]; return n; }
@@ -304,6 +286,15 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => tab(b.dat
 // ---- log expiry ----
 function focusBc() { $('bc').setAttribute('inputmode', 'none'); $('bc').focus(); }
 $('kb').onclick = () => { const i = $('bc'); if (i.getAttribute('inputmode') === 'none') { i.removeAttribute('inputmode'); i.blur(); i.focus(); } else focusBc(); };
+let armed = null, bt;
+function goDate() { $('dt').focus(); if ($('dt').showPicker) try { $('dt').showPicker(); } catch (x) {} }
+$('bc').oninput = () => {
+  const v = $('bc').value.trim(); clearTimeout(bt);
+  const p = v ? find(v) : null;
+  $('bc-info').textContent = p ? '✓ ' + (p.desc || p.code) : (v.length > 6 ? 'No product with this barcode' : '');
+  $('bc-info').style.color = p ? '#047857' : '#b91c1c';
+  if (p && armed !== v) bt = setTimeout(() => { armed = v; goDate(); }, 250);
+};
 $('bc').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('dt').focus(); if ($('dt').showPicker) try { $('dt').showPicker(); } catch (x) {} } };
 $('save').onclick = () => {
   const v = $('bc').value.trim(), d = $('dt').value;
@@ -312,7 +303,7 @@ $('save').onclick = () => {
   if (!p) return msg('m-log', 'Item code not found in Products. Add it in the Products tab first.', 1);
   S.log.push({id: uid(), code: p.code, date: d}); sortLog(); save();
   msg('m-log', 'Saved: ' + p.code + ' – ' + (p.desc || '') + ' (' + fmt(d) + ')');
-  $('bc').value = ''; $('dt').value = ''; focusBc();
+  $('bc').value = ''; $('dt').value = ''; armed = null; $('bc-info').textContent = ''; focusBc();
 };
 
 // ---- dashboard ----
@@ -390,20 +381,14 @@ function plist() {
   const q = $('pq').value.toLowerCase();
   const l = S.products.filter(p => (p.code + p.barcode + p.desc).toLowerCase().includes(q));
   $('pcount').textContent = '(' + S.products.length + ')';
-  const dn = dupCount(); $('pdup').textContent = dn ? '🧹 Remove duplicates (' + dn + ')' : '🧹 Remove duplicates';
+  const dn = dupCount(); $('pdup').textContent = dn ? 'Remove duplicates (' + dn + ')' : 'Remove duplicates';
   $('ptb').innerHTML = l.slice(0, 100).map(p => `<div class="pr">${p.img ? `<img src="${esc(p.img)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=ph>📦</div>'">` : '<div class="ph">📦</div>'}
 <div class="pi"><b>${esc(p.desc || p.code)}</b><small>Barcode ${esc(p.barcode)} · Code ${esc(p.code)}${p.loc ? ' · Loc ' + esc(p.loc) : ''}</small></div>
-<div class="pb"><button class="b2 ed" data-ed="${pk(p)}">Edit</button><button class="b2 dl" data-del="${pk(p)}">Del</button></div></div>`).join('')
+<div class="pb"><button class="b2" data-ed="${pk(p)}">Edit</button><button class="b2" data-del="${pk(p)}" style="background:#fee2e2;color:#dc2626">Del</button></div></div>`).join('')
     || '<small>No products yet.</small>';
   if (l.length > 100) $('ptb').insertAdjacentHTML('beforeend', '<small style="display:block;padding:12px 0">Showing 100 of ' + l.length + '. Use search to find others.</small>');
 }
 $('pq').oninput = plist;
-$('pfix').onclick = () => {
-  const n = S.products.filter(p => JSON.stringify(fixP(p)) !== JSON.stringify(p)).length;
-  if (!n) return msg('m-db', 'Nothing to fix. No swapped code/barcode or image links in the wrong field.');
-  if (!confirm('Fix ' + n + ' product(s)? Image links in Location move to Image, and a long code in Code swaps with the short barcode.')) return;
-  const r = fixAll(); save(); plist(); msg('m-db', 'Fixed ' + r + ' product(s).');
-};
 $('pdup').onclick = () => {
   const n = dupCount();
   if (!n) return msg('m-db', 'No duplicates found. A duplicate needs the same item code, barcode AND description.');
@@ -435,7 +420,7 @@ $('pcsv').onchange = async e => {
   const rows = parseCSV(await f.text()).filter(r => r[0] && r[0].trim());
   if (rows.length && /item/i.test(rows[0][0])) rows.shift();
   const before = S.products.length;
-  addProducts(rows.map(r => fixP({code: r[0].trim(), barcode: (r[1] || '').trim(), desc: (r[2] || '').trim(), img: (r[4] || '').trim(), loc: (r[5] || '').trim()})));
+  addProducts(rows.map(r => ({code: r[0].trim(), barcode: (r[1] || '').trim(), desc: (r[2] || '').trim(), img: (r[4] || '').trim(), loc: (r[5] || '').trim()})));
   save(); plist(); msg('m-db', 'Read ' + rows.length + ' rows: ' + (S.products.length - before) + ' new, ' + (rows.length - (S.products.length - before)) + ' already existed or were identical duplicates.'); e.target.value = '';
 };
 const dl = (name, text, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); };
