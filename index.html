@@ -52,7 +52,7 @@ small{color:var(--m);font-size:12px}
 .sc{overflow-x:auto}
 .chip{flex:1;min-width:0;height:40px;padding:0;border-radius:12px;border:0;background:#f1f5f9;color:var(--m);font-family:inherit;font-weight:800;font-size:12px;cursor:pointer}.chip.on{background:var(--p);color:#fff}
 details summary{cursor:pointer;padding:6px 0}
-#cam,#pin{position:fixed;inset:0;background:#0f172acc;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20;padding:20px}
+#cam,#pin,#rules{position:fixed;inset:0;background:#0f172acc;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20;padding:20px}
 #cam video{width:100%;max-width:480px;border-radius:20px}
 .pc{background:#fff;border-radius:26px;padding:24px;width:100%;max-width:340px}
 #pin-in{text-align:center;letter-spacing:.5em;font-size:24px}
@@ -77,7 +77,7 @@ details summary{cursor:pointer;padding:6px 0}
 
 <section id="dash" hidden>
 <h1>Live dashboard <small id="today"></small></h1>
-<div class="tools"><button class="b2" id="mail">✉️ Email alert</button><button class="b2" id="prev">👁 Preview email</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
+<div class="tools"><button class="b2" id="rbtn">📋 Rules</button><button class="b2" id="mail">✉️ Email alert</button><button class="b2" id="prev">👁 Preview email</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
 <input id="q" placeholder="Search item, description, location…" style="height:42px;margin-bottom:12px">
 <div class="msg" id="m-dash"></div>
 <div class="sc"><table><thead><tr><th style="width:50px"></th><th>Item</th><th style="width:112px;text-align:right">Expiry</th><th style="width:40px"></th></tr></thead><tbody id="tb"></tbody></table></div>
@@ -139,7 +139,7 @@ details summary{cursor:pointer;padding:6px 0}
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
 </details>
-<small>App version 11 (auto date)</small>
+<small>App version 14 (rules popup)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -147,12 +147,20 @@ details summary{cursor:pointer;padding:6px 0}
 </div>
 
 <div id="pin"><div class="pc"><h1>Enter PIN</h1><input id="pin-in" type="password" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="off"><div class="msg" id="m-pin"></div><div class="row" style="margin-top:14px"><button class="b1" id="pin-x">Cancel</button><button class="go" id="pin-ok" style="margin:0;height:54px">Unlock</button></div></div></div>
+<div id="rules"><div class="pc"><h1>Alert rules</h1><div id="rl-body"></div><button class="go" id="rl-x" style="margin-top:16px;height:50px">Close</button></div></div>
 <div id="cam"><video id="vid" playsinline muted></video><button class="b1" id="camx">Cancel</button></div>
 
 <script>
 // ---- settings ----
-const MIN_DAYS = 4;   // items with fewer days left are auto-removed (same as your sheet)
-const ALERT_DAYS = 4; // "Expiring Soon" at or below this
+// Days-before-expiry rule by LOCATION. First match wins. Edit the numbers here.
+const RULES = [
+  [/^FR(\s?\d|$)|FROZEN/, 30, 'Frozen (FR 1, FR3…)'],     // frozen: FR 1, FR3, FROZEN...
+  [/COLD\s*CUTS/, 7, 'COLD CUTS'],              // cold cuts
+  [/\d\s*C$|^DELI\s*C$/, 7, '18C, 19C, 20C, DELI C'],       // 18C, 19C, 20C, DELI C
+  [/\d\s*B$/, 15, '18B, 19B, 20B']                // 18B, 19B, 20B
+];
+const DEFAULT_DAYS = 4;            // plain 18, 19, 20, DELI, etc.
+const WARN = 3;                    // email warns from (rule + 3) days down to the rule day
 const SCANNER_URL = 'https://crisaly.github.io/barcode-scanner/'; // fallback scanner (iOS/Safari)
 
 // ---- storage ----
@@ -178,11 +186,13 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = d => d.slice(8) + '/' + d.slice(5, 7);
 function msg(id, t, err) { const e = $(id); e.textContent = t; e.className = 'msg' + (err ? ' e' : ''); }
+function limitFor(loc) { const l = String(loc || '').trim().toUpperCase().replace(/\s+/g, ' '); for (const [re, n] of RULES) if (re.test(l)) return n; return DEFAULT_DAYS; }
+const limitOf = code => limitFor(byCode(code).loc);
 function days(d) { const t = new Date(); t.setHours(0,0,0,0); const [y,m,x] = d.split('-'); return Math.round((new Date(y, m-1, x) - t) / 864e5); }
 const byCode = c => S.products.find(p => p.code === c) || {};
 function find(v) { v = v.trim(); return S.products.find(p => v.length <= 6 ? p.code === v : p.barcode === v); } // same rule as your script
 function sortLog() { S.log.sort((a, b) => a.date.localeCompare(b.date)); }
-function autoClean() { const n = S.log.length; S.log = S.log.filter(r => days(r.date) >= MIN_DAYS); if (S.log.length !== n) save(); }
+function autoClean() { const n = S.log.length; S.log = S.log.filter(r => days(r.date) >= limitOf(r.code)); if (S.log.length !== n) save(); }
 
 // ---- cross-device sync (Firebase Realtime Database) ----
 const BK = 'expiryTracker.base';
@@ -311,11 +321,11 @@ function dash() {
   autoClean(); sortLog();
   $('today').textContent = new Date().toLocaleDateString('en-GB');
   const q = $('q').value.toLowerCase();
-  const rows = S.log.map(r => ({...r, p: byCode(r.code), n: days(r.date)}))
+  const rows = S.log.map(r => ({...r, p: byCode(r.code), n: days(r.date), lim: limitFor(byCode(r.code).loc)}))
     .filter(r => (r.code + ' ' + (r.p.desc || '') + ' ' + (r.p.loc || '')).toLowerCase().includes(q));
   $('tb').innerHTML = rows.map(r => `<tr><td>${r.p.img ? `<img src="${esc(r.p.img)}" alt="" loading="lazy">` : ''}</td>
 <td><b>${esc(r.code)}</b><br><small>${esc(r.p.desc)}</small></td>
-<td style="text-align:right"><span class="bd ${r.n <= 4 ? 'd' : r.n <= 7 ? 'w' : 'o'}">${r.n <= ALERT_DAYS ? 'Expiring Soon' : 'OK'}</span><br><small>${fmt(r.date)} · ${r.n}d${r.p.loc ? ' · ' + esc(r.p.loc) : ''}</small></td><td style="text-align:right"><button class="x" data-x="${esc(r.id)}" title="Delete">✕</button></td></tr>`).join('')
+<td style="text-align:right"><span class="bd ${r.n <= r.lim ? 'd' : r.n <= r.lim + WARN ? 'w' : 'o'}">${r.n <= r.lim ? 'Expiring Soon' : 'OK'}</span><br><small>${fmt(r.date)} · ${r.n}d${r.p.loc ? ' · ' + esc(r.p.loc) : ''}</small></td><td style="text-align:right"><button class="x" data-x="${esc(r.id)}" title="Delete">✕</button></td></tr>`).join('')
     || '<tr><td colspan="4" style="text-align:center">No expiring items found.</td></tr>';
 }
 $('tb').onclick = e => {
@@ -323,24 +333,32 @@ $('tb').onclick = e => {
   const r = S.log.find(x => x.id === id); if (!r || !confirm('Delete ' + r.code + ' (' + fmt(r.date) + ') from the list?')) return;
   S.log = S.log.filter(x => x.id !== id); save(); dash(); msg('m-dash', 'Item deleted.');
 };
+$('rbtn').onclick = () => {
+  const rows = RULES.map(r => [r[2], r[1]]).concat([['Everything else (18, 19, 20, DELI…)', DEFAULT_DAYS]]);
+  $('rl-body').innerHTML = '<table style="table-layout:auto">' + rows.map(r => '<tr><td><b>' + esc(r[0]) + '</b></td><td style="text-align:right;white-space:nowrap"><span class="bd o">' + r[1] + ' days</span></td></tr>').join('') + '</table>'
+    + '<small style="display:block;margin-top:12px;line-height:1.5">The days are counted before the expiry date. At that day an item shows <b>Expiring Soon</b> and is then removed from the list. The email warns ' + WARN + ' days earlier. The rule comes from the product\'s Location.</small>';
+  $('rules').style.display = 'flex';
+};
+$('rl-x').onclick = () => { $('rules').style.display = 'none'; };
+$('rules').onclick = e => { if (e.target === $('rules')) $('rules').style.display = 'none'; };
 $('q').oninput = dash; $('ref').onclick = dash;
 $('dedupe').onclick = () => {
   const seen = new Set(), n = S.log.length;
   S.log = S.log.filter(r => { const k = r.code + '|' + r.date; if (seen.has(k)) return false; seen.add(k); return true; });
   save(); dash(); msg('m-dash', 'Removed ' + (n - S.log.length) + ' duplicate record(s).');
 };
-const ALERT_SUBJ = 'Alert: Items Expiring Soon (4 - 7 Days Left)';
+const ALERT_SUBJ = 'Alert: Items Expiring Soon';
 function alertItems() {
   autoClean(); const seen = new Set(), out = [];
   S.log.forEach(r => {
-    const n = days(r.date); if (n < 4 || n > 7 || seen.has(r.code)) return; seen.add(r.code);
-    out.push({...byCode(r.code), code: r.code, n, date: r.date.split('-').reverse().join('/')});
+    const n = days(r.date), lim = limitOf(r.code); if (n < lim || n > lim + WARN || seen.has(r.code)) return; seen.add(r.code);
+    out.push({...byCode(r.code), code: r.code, n, lim, date: r.date.split('-').reverse().join('/')});
   });
   return out;
 }
 function alertBody() {
   const it = alertItems(); if (!it.length) return '';
-  return ['Items expiring soon (4–7 days left):', ''].concat(it.map(p => [(p.desc || p.code), 'Item: ' + p.code + ' | Days left: ' + p.n + ' | Expires: ' + p.date + (p.loc ? ' | Location: ' + p.loc : ''), ''].join('\n'))).join('\n');
+  return ['Items expiring soon:', ''].concat(it.map(p => [(p.desc || p.code), 'Item: ' + p.code + ' | Days left: ' + p.n + ' | Expires: ' + p.date + (p.loc ? ' | Location: ' + p.loc : ''), ''].join('\n'))).join('\n');
 }
 function shell(inner) {
   return '<div style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;padding:24px 12px;"><div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;"><div style="background:#2563eb;padding:16px 20px;"><span style="color:#ffffff;font-size:15px;font-weight:bold;">⏰ Expiry Tracker</span></div><div style="padding:6px 20px 20px;">' + inner + '</div><div style="padding:12px 20px;background:#f8fafc;font-size:11px;color:#94a3b8;text-align:center;">Sent via Product Expiry Tracker</div></div></div>';
@@ -348,7 +366,7 @@ function shell(inner) {
 function alertHtml() {
   const it = alertItems();
   const rows = it.map(p => {
-    const bg = p.n === 4 ? '#ffebe9' : '#fff8c5', fg = p.n === 4 ? '#cf222e' : '#9a6700';
+    const bg = p.n <= p.lim ? '#ffebe9' : '#fff8c5', fg = p.n <= p.lim ? '#cf222e' : '#9a6700';
     const img = p.img ? '<img src="' + esc(p.img) + '" alt="' + esc(p.desc) + '" width="90" style="display:block;width:90px;height:auto;border-radius:8px;border:1px solid #cbd5e1;">'
       : '<div style="width:90px;height:70px;line-height:70px;text-align:center;color:#64748b;background:#f1f5f9;border-radius:8px;font-family:Arial,sans-serif;font-size:11px;">No image</div>';
     const loc = p.loc ? '<span style="display:inline-block;font-size:11px;font-weight:700;color:#ffffff;background:#dc2626;border-radius:8px;padding:4px 8px;margin-left:6px;">Location ' + esc(p.loc) + '</span>' : '';
@@ -358,10 +376,10 @@ function alertHtml() {
       + '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:8px;">Expires ' + p.date + '</div>'
       + '<span style="display:inline-block;font-size:11px;font-weight:700;color:' + fg + ';background:' + bg + ';border-radius:8px;padding:4px 8px;">' + p.n + ' days left</span>' + loc + '</td></tr>';
   }).join('');
-  return shell('<p style="font-size:14px;color:#0f172a;">The following ' + (it.length === 1 ? 'item is' : it.length + ' items are') + ' approaching their expiration date (4–7 days left):</p><table style="width:100%;border-collapse:collapse;">' + rows + '</table>');
+  return shell('<p style="font-size:14px;color:#0f172a;">The following ' + (it.length === 1 ? 'item is' : it.length + ' items are') + ' approaching their expiration date:</p><table style="width:100%;border-collapse:collapse;">' + rows + '</table>');
 }
-$('prev').onclick = () => { if (!alertItems().length) return msg('m-dash', 'No items with 4–7 days left to preview.', 1); const w = window.open('', '_blank'); if (!w) return msg('m-dash', 'Allow pop-ups to preview.', 1); w.document.write('<meta name=viewport content="width=device-width">' + alertHtml()); w.document.close(); };
-$('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 'No items with 4–7 days left.', 1); send(ALERT_SUBJ, b, 'm-dash', false, alertHtml()); };
+$('prev').onclick = () => { if (!alertItems().length) return msg('m-dash', 'No items in their alert window to preview.', 1); const w = window.open('', '_blank'); if (!w) return msg('m-dash', 'Allow pop-ups to preview.', 1); w.document.write('<meta name=viewport content="width=device-width">' + alertHtml()); w.document.close(); };
+$('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 'No items in their alert window.', 1); send(ALERT_SUBJ, b, 'm-dash', false, alertHtml()); };
 
 // ---- products ----
 $('padd').onclick = () => {
