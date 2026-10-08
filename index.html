@@ -139,7 +139,7 @@ details summary{cursor:pointer;padding:6px 0}
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
 </details>
-<small>App version 14 (rules popup)</small>
+<small>App version 15 (21 added)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -156,8 +156,8 @@ details summary{cursor:pointer;padding:6px 0}
 const RULES = [
   [/^FR(\s?\d|$)|FROZEN/, 30, 'Frozen (FR 1, FR3…)'],     // frozen: FR 1, FR3, FROZEN...
   [/COLD\s*CUTS/, 7, 'COLD CUTS'],              // cold cuts
-  [/\d\s*C$|^DELI\s*C$/, 7, '18C, 19C, 20C, DELI C'],       // 18C, 19C, 20C, DELI C
-  [/\d\s*B$/, 15, '18B, 19B, 20B']                // 18B, 19B, 20B
+  [/\d\s*C$|^DELI\s*C$/, 7, '18C, 19C, 20C, 21C, DELI C'],       // 18C, 19C, 20C, DELI C
+  [/\d\s*B$/, 15, '18B, 19B, 20B, 21B']                // 18B, 19B, 20B
 ];
 const DEFAULT_DAYS = 4;            // plain 18, 19, 20, DELI, etc.
 const WARN = 3;                    // email warns from (rule + 3) days down to the rule day
@@ -334,7 +334,7 @@ $('tb').onclick = e => {
   S.log = S.log.filter(x => x.id !== id); save(); dash(); msg('m-dash', 'Item deleted.');
 };
 $('rbtn').onclick = () => {
-  const rows = RULES.map(r => [r[2], r[1]]).concat([['Everything else (18, 19, 20, DELI…)', DEFAULT_DAYS]]);
+  const rows = RULES.map(r => [r[2], r[1]]).concat([['Everything else (18, 19, 20, 21, DELI…)', DEFAULT_DAYS]]);
   $('rl-body').innerHTML = '<table style="table-layout:auto">' + rows.map(r => '<tr><td><b>' + esc(r[0]) + '</b></td><td style="text-align:right;white-space:nowrap"><span class="bd o">' + r[1] + ' days</span></td></tr>').join('') + '</table>'
     + '<small style="display:block;margin-top:12px;line-height:1.5">The days are counted before the expiry date. At that day an item shows <b>Expiring Soon</b> and is then removed from the list. The email warns ' + WARN + ' days earlier. The rule comes from the product\'s Location.</small>';
   $('rules').style.display = 'flex';
