@@ -179,8 +179,11 @@ function pk(p) { // identity of a product = item code + barcode + description (a
 }
 function dupCount() { return S.products.length - new Set(S.products.map(pk)).size; }
 function dedupeProducts() { const m = new Map(); S.products.forEach(p => { const k = pk(p); if (!m.has(k)) m.set(k, p); }); const n = S.products.length - m.size; if (n) S.products = [...m.values()]; return n; }
-function addProducts(list) { const m = new Map(S.products.map(p => [pk(p), p])); list.forEach(p => m.set(pk(p), p)); S.products = [...m.values()]; }
+const cb = v => String(v == null ? '' : v).trim().replace(/\.0+$/, ''); // strip trailing ".0" from barcodes (e.g. 5760466736084.0 -> 5760466736084)
+function cleanBarcodes() { let n = 0; S.products.forEach(p => { const c = cb(p.barcode); if (c !== p.barcode) { p.barcode = c; n++; } }); return n; }
+function addProducts(list) { list.forEach(p => p.barcode = cb(p.barcode)); const m = new Map(S.products.map(p => [pk(p), p])); list.forEach(p => m.set(pk(p), p)); S.products = [...m.values()]; }
 fixIds();
+if (cleanBarcodes()) { dedupeProducts(); try { localStorage.setItem(K, JSON.stringify(S)); } catch (e) {} }
 const saveLocal = () => localStorage.setItem(K, JSON.stringify(S));
 const save = () => { saveLocal(); queue(); };
 const $ = id => document.getElementById(id);
@@ -191,7 +194,7 @@ function limitFor(loc) { const l = String(loc || '').trim().toUpperCase().replac
 const limitOf = code => limitFor(byCode(code).loc);
 function days(d) { const t = new Date(); t.setHours(0,0,0,0); const [y,m,x] = d.split('-'); return Math.round((new Date(y, m-1, x) - t) / 864e5); }
 const byCode = c => S.products.find(p => p.code === c) || {};
-function find(v) { v = v.trim(); return S.products.find(p => v.length <= 6 ? p.code === v : p.barcode === v); } // same rule as your script
+function find(v) { v = cb(v); return S.products.find(p => v.length <= 6 ? p.code === v : p.barcode === v); } // same rule as your script
 function sortLog() { S.log.sort((a, b) => a.date.localeCompare(b.date)); }
 function autoClean() { const n = S.log.length; S.log = S.log.filter(r => days(r.date) >= limitOf(r.code)); if (S.log.length !== n) save(); }
 
@@ -217,6 +220,7 @@ function flatOf(o) {
 function stateOf(m) {
   const o = {log: [], products: [], recipients: [], sched: [], ejs: {}};
   for (const k in m) { const g = k.split('/')[0], v = JSON.parse(m[k]); if (g === 'ejs') o.ejs = v; else o[G[g]].push(v); }
+  o.products.forEach(p => p.barcode = cb(p.barcode));
   return o;
 }
 function remoteFlat(d) {
@@ -462,7 +466,7 @@ $('pexp').onclick = () => {
 $('clear').onclick = () => {
   const s = $('cl').value.trim();
   if (!s) return msg('m-cl', 'Please enter or scan a barcode/item number to clear!', 1);
-  const prod = S.products.find(p => p.code === s || p.barcode === s), code = prod ? prod.code : s, n = S.log.length;
+  const prod = S.products.find(p => p.code === s || p.barcode === cb(s)), code = prod ? prod.code : s, n = S.log.length;
   S.log = S.log.filter(r => r.code !== s && r.code !== code); save();
   msg('m-cl', 'Success! Cleared ' + (n - S.log.length) + ' instances of item: ' + s); $('cl').value = '';
 };
