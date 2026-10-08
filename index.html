@@ -28,6 +28,7 @@ input:focus,textarea:focus{outline:0;border-color:var(--p);background:#fff;box-s
 input[type=date],input[type=time]{text-align:left}
 .row{display:flex;gap:8px}.row>*{min-width:0}.row input{flex:1}
 button.b1{height:54px;min-width:54px;padding:0 16px;border:0;border-radius:16px;background:#eef2ff;color:var(--p);font-family:inherit;font-weight:700;font-size:15px;cursor:pointer}
+button.b1.on{background:var(--p);color:#fff}
 button.b2{height:40px;padding:0 14px;border:0;border-radius:12px;background:#eef2ff;color:var(--p);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer}
 button.go{display:block;width:100%;height:56px;margin-top:20px;border:0;border-radius:18px;background:linear-gradient(135deg,var(--p),var(--p2));color:#fff;font-family:inherit;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 14px 24px -10px #4f46e5bb}
 button.go:active,button.b1:active,button.b2:active{transform:scale(.98)}
@@ -78,7 +79,7 @@ details summary{cursor:pointer;padding:6px 0}
 <section id="dash" hidden>
 <h1>Live dashboard <small id="today"></small></h1>
 <div class="tools"><button class="b2" id="rbtn">📋 Rules</button><button class="b2" id="mail">✉️ Email alert</button><button class="b2" id="prev">👁 Preview email</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
-<input id="q" placeholder="Search item, description, location…" style="height:42px;margin-bottom:12px">
+<input id="q" placeholder="Search barcode, item, description, location…" style="height:42px;margin-bottom:12px">
 <div class="msg" id="m-dash"></div>
 <div class="sc"><table><thead><tr><th style="width:50px"></th><th>Item</th><th style="width:112px;text-align:right">Expiry</th><th style="width:40px"></th></tr></thead><tbody id="tb"></tbody></table></div>
 </section>
@@ -139,7 +140,7 @@ details summary{cursor:pointer;padding:6px 0}
 <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
 </details>
-<small>App version 15 (21 added)</small>
+<small>App version 16 (search + show all + keyboard)</small>
 <h2>Backup</h2>
 <div class="tools"><button class="b2" id="bk">Download backup</button><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Restore backup<input type="file" id="rs" accept=".json" hidden></label></div>
 <div class="msg" id="m-bk"></div>
@@ -294,8 +295,16 @@ function tab(t) {
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => tab(b.dataset.t));
 
 // ---- log expiry ----
-function focusBc() { $('bc').setAttribute('inputmode', 'none'); $('bc').focus(); }
-$('kb').onclick = () => { const i = $('bc'); if (i.getAttribute('inputmode') === 'none') { i.removeAttribute('inputmode'); i.blur(); i.focus(); } else focusBc(); };
+let kbOn = false;
+function focusBc() { $('bc').setAttribute('inputmode', kbOn ? 'text' : 'none'); $('bc').focus(); }
+function setKb(on) {
+  kbOn = on; const i = $('bc'); $('kb').classList.toggle('on', on);
+  if (on) { // phones only raise the keyboard if focus happens inside the tap, so use a helper input
+    const t = document.createElement('input'); t.setAttribute('inputmode', 'text'); t.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+    document.body.appendChild(t); t.focus(); i.setAttribute('inputmode', 'text'); i.focus(); setTimeout(() => t.remove(), 300);
+  } else { i.setAttribute('inputmode', 'none'); i.blur(); i.focus(); }
+}
+$('kb').onclick = () => setKb(!kbOn);
 let armed = null, bt;
 function goDate() { $('dt').focus(); if ($('dt').showPicker) try { $('dt').showPicker(); } catch (x) {} }
 $('bc').oninput = () => {
@@ -322,7 +331,7 @@ function dash() {
   $('today').textContent = new Date().toLocaleDateString('en-GB');
   const q = $('q').value.toLowerCase();
   const rows = S.log.map(r => ({...r, p: byCode(r.code), n: days(r.date), lim: limitFor(byCode(r.code).loc)}))
-    .filter(r => (r.code + ' ' + (r.p.desc || '') + ' ' + (r.p.loc || '')).toLowerCase().includes(q));
+    .filter(r => { const hay = [r.code, r.p.barcode, r.p.desc, r.p.loc].join(' ').toLowerCase(); return q.split(/\s+/).filter(Boolean).every(t => hay.includes(t)); });
   $('tb').innerHTML = rows.map(r => `<tr><td>${r.p.img ? `<img src="${esc(r.p.img)}" alt="" loading="lazy">` : ''}</td>
 <td><b>${esc(r.code)}</b><br><small>${esc(r.p.desc)}</small></td>
 <td style="text-align:right"><span class="bd ${r.n <= r.lim ? 'd' : r.n <= r.lim + WARN ? 'w' : 'o'}">${r.n <= r.lim ? 'Expiring Soon' : 'OK'}</span><br><small>${fmt(r.date)} · ${r.n}d${r.p.loc ? ' · ' + esc(r.p.loc) : ''}</small></td><td style="text-align:right"><button class="x" data-x="${esc(r.id)}" title="Delete">✕</button></td></tr>`).join('')
@@ -395,16 +404,17 @@ let editing = null;
 function stopEdit() { editing = null; $('padd').textContent = 'Save product'; $('pcancel').style.display = 'none'; ['code','bar','desc','loc','img'].forEach(k => $('p-' + k).value = ''); }
 $('pcancel').onclick = () => { stopEdit(); msg('m-db', 'Edit cancelled.'); };
 
+let showAll = false;
 function plist() {
   const q = $('pq').value.toLowerCase();
-  const l = S.products.filter(p => (p.code + p.barcode + p.desc).toLowerCase().includes(q));
+  const l = S.products.filter(p => { const hay = [p.code, p.barcode, p.desc, p.loc].join(' ').toLowerCase(); return q.split(/\s+/).filter(Boolean).every(t => hay.includes(t)); });
   $('pcount').textContent = '(' + S.products.length + ')';
   const dn = dupCount(); $('pdup').textContent = dn ? 'Remove duplicates (' + dn + ')' : 'Remove duplicates';
-  $('ptb').innerHTML = l.slice(0, 100).map(p => `<div class="pr">${p.img ? `<img src="${esc(p.img)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=ph>📦</div>'">` : '<div class="ph">📦</div>'}
+  $('ptb').innerHTML = l.slice(0, showAll ? l.length : 100).map(p => `<div class="pr">${p.img ? `<img src="${esc(p.img)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=ph>📦</div>'">` : '<div class="ph">📦</div>'}
 <div class="pi"><b>${esc(p.desc || p.code)}</b><small>Barcode ${esc(p.barcode)} · Code ${esc(p.code)}${p.loc ? ' · Loc ' + esc(p.loc) : ''}</small></div>
 <div class="pb"><button class="b2" data-ed="${pk(p)}">Edit</button><button class="b2" data-del="${pk(p)}" style="background:#fee2e2;color:#dc2626">Del</button></div></div>`).join('')
     || '<small>No products yet.</small>';
-  if (l.length > 100) $('ptb').insertAdjacentHTML('beforeend', '<small style="display:block;padding:12px 0">Showing 100 of ' + l.length + '. Use search to find others.</small>');
+  if (l.length > 100) $('ptb').insertAdjacentHTML('beforeend', '<div style="padding:14px 0"><small>' + (showAll ? 'Showing all ' + l.length : 'Showing 100 of ' + l.length) + '.</small> <button class="b2" id="pall">' + (showAll ? 'Show fewer' : 'Show all (' + l.length + ')') + '</button></div>');
 }
 $('pq').oninput = plist;
 $('pdup').onclick = () => {
@@ -414,6 +424,7 @@ $('pdup').onclick = () => {
   const r = dedupeProducts(); save(); plist(); msg('m-db', 'Removed ' + r + ' duplicate(s).');
 };
 $('ptb').onclick = e => {
+  if (e.target.id === 'pall') { showAll = !showAll; plist(); return; }
   const ed = e.target.dataset.ed;
   if (ed) { const p = S.products.find(x => pk(x) === ed); if (!p) return; editing = ed;
     $('p-code').value = p.code; $('p-bar').value = p.barcode || ''; $('p-desc').value = p.desc || ''; $('p-loc').value = p.loc || ''; $('p-img').value = p.img || '';
