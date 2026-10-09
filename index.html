@@ -96,6 +96,7 @@ details summary{cursor:pointer;padding:6px 0}
 <div class="msg" id="m-db"></div>
 <h2>Import / export</h2>
 <div class="tools"><label class="b2" style="margin:0;display:inline-flex;align-items:center;border-radius:12px;cursor:pointer">Import CSV<input type="file" id="pcsv" accept=".csv" hidden></label><button class="b2" id="pexp">Export CSV</button></div>
+<label style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;font-weight:600;cursor:pointer"><input type="checkbox" id="prep" style="width:auto;height:auto;margin:0">Replace all existing products</label>
 <small>CSV columns like your DATA sheet: Item Code, Barcode, Description, (blank), Image URL, Location.</small>
 <h2>Product list <small id="pcount"></small></h2>
 <div class="tools"><button class="b2" id="pdup">Remove duplicates</button></div>
@@ -452,9 +453,13 @@ $('pcsv').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   const rows = parseCSV(await f.text()).filter(r => r[0] && r[0].trim());
   if (rows.length && /item/i.test(rows[0][0])) rows.shift();
+  const repl = $('prep').checked;
+  if (repl && !confirm('Replace ALL ' + S.products.length + ' existing products with the ' + rows.length + ' rows from this file?')) { e.target.value = ''; return; }
+  if (repl) S.products = [];
   const before = S.products.length;
   addProducts(rows.map(r => ({code: r[0].trim(), barcode: (r[1] || '').trim(), desc: (r[2] || '').trim(), img: (r[4] || '').trim(), loc: (r[5] || '').trim()})));
-  save(); plist(); msg('m-db', 'Read ' + rows.length + ' rows: ' + (S.products.length - before) + ' new, ' + (rows.length - (S.products.length - before)) + ' already existed or were identical duplicates.'); e.target.value = '';
+  $('prep').checked = false;
+  save(); plist(); if (repl) msg('m-db', 'Replaced all products. Now ' + S.products.length + ' products (' + rows.length + ' rows read).'); else msg('m-db', 'Read ' + rows.length + ' rows: ' + (S.products.length - before) + ' new, ' + (rows.length - (S.products.length - before)) + ' already existed or were identical duplicates.'); e.target.value = '';
 };
 const dl = (name, text, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); };
 $('pexp').onclick = () => {
