@@ -350,7 +350,7 @@ $('tb').onclick = e => {
 $('rbtn').onclick = () => {
   const rows = RULES.map(r => [r[2], r[1]]).concat([['Everything else (18, 19, 20, 21, DELI…)', DEFAULT_DAYS]]);
   $('rl-body').innerHTML = '<table style="table-layout:auto">' + rows.map(r => '<tr><td><b>' + esc(r[0]) + '</b></td><td style="text-align:right;white-space:nowrap"><span class="bd o">' + r[1] + ' days</span></td></tr>').join('') + '</table>'
-    + '<small style="display:block;margin-top:12px;line-height:1.5">The days are counted before the expiry date. At that day an item shows <b>Expiring Soon</b> and is then removed from the list. The email warns ' + WARN + ' days earlier. The rule comes from the product\'s Location.</small>';
+    + '<small style="display:block;margin-top:12px;line-height:1.5">The days are counted before the expiry date. At that day an item shows <b>Expiring Soon</b> and is then removed from the list. The email lists only items with exactly that many days left. The rule comes from the product\'s Location.</small>';
   $('rules').style.display = 'flex';
 };
 $('rl-x').onclick = () => { $('rules').style.display = 'none'; };
@@ -365,7 +365,8 @@ const ALERT_SUBJ = 'Alert: Items Expiring Soon';
 function alertItems() {
   autoClean(); const seen = new Set(), out = [];
   S.log.forEach(r => {
-    const n = days(r.date), lim = limitOf(r.code); if (n < lim || n > lim + WARN || seen.has(r.code)) return; seen.add(r.code);
+    const n = days(r.date), lim = limitOf(r.code); if (n !== lim || seen.has(r.code)) return; // email: only items whose days left = exactly the rule days
+     seen.add(r.code);
     out.push({...byCode(r.code), code: r.code, n, lim, date: r.date.split('-').reverse().join('/')});
   });
   return out;
