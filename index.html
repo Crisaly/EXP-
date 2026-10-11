@@ -78,7 +78,7 @@ details summary{cursor:pointer;padding:6px 0}
 
 <section id="dash" hidden>
 <h1>Live dashboard <small id="today"></small></h1>
-<div class="tools"><button class="b2" id="rbtn">📋 Rules</button><button class="b2" id="mail">✉️ Email alert</button><button class="b2" id="prev">👁 Preview email</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
+<div class="tools"><button class="b2" id="rbtn">📋 Rules</button><button class="b2" id="prev">👁 Preview email</button><button class="b2" onclick="print()">🖨️ Print</button><button class="b2" id="dedupe">Clean duplicates</button><button class="b2" id="ref">Refresh</button></div>
 <input id="q" placeholder="Search barcode, item, description, location…" style="height:42px;margin-bottom:12px">
 <div class="msg" id="m-dash"></div>
 <div class="sc"><table><thead><tr><th style="width:50px"></th><th>Item</th><th style="width:112px;text-align:right">Expiry</th><th style="width:40px"></th></tr></thead><tbody id="tb"></tbody></table></div>
@@ -106,21 +106,12 @@ details summary{cursor:pointer;padding:6px 0}
 
 <section id="tools" hidden>
 <div class="tools"><button class="b2" id="lock">🔒 Lock Products &amp; Tools</button></div>
-<h1>Clear records</h1>
-<label>Barcode / item code</label>
-<div class="row"><input id="cl" autocomplete="off" placeholder="Scan or type code"><button class="b1" id="cam2">📷</button></div>
-<button class="go red" id="clear">Clear records</button>
-<div class="msg" id="m-cl"></div>
-<details id="rcpt" style="margin-top:24px"><summary><h2 style="display:inline;margin:0">Email recipients</h2> <small id="rcount"></small></summary>
+<details id="rcpt" style="margin-top:12px"><summary><h2 style="display:inline;margin:0">Email recipients</h2> <small id="rcount"></small></summary>
 <div class="row"><input id="r-name" placeholder="Name"><input id="r-mail" type="email" placeholder="Email"><button class="b1" id="radd">Add</button></div>
-<small>Tick the people who should receive alerts. Saved on this device only.</small>
+<small>Tick the people who should receive alerts.</small>
 <div id="rl" style="margin-top:6px"></div>
-<button class="go" id="etest" style="height:44px;margin-top:10px">Send test email</button>
 <div class="msg" id="m-em"></div>
 </details>
-<details style="margin-top:12px"><summary><b>Sending setup (EmailJS, free)</b></summary>
-<small>At emailjs.com add an email service and a template with To email = {{to_email}}, Subject = {{subject}}, and in the Code editor set the content to just {{{message_html}}} (three braces). That gives the designed email with pictures. Paste the IDs here. Without this, emails open in your mail app instead of sending directly.</small>
-<input id="j-svc" placeholder="Service ID" style="margin-top:8px"><input id="j-tpl" placeholder="Template ID" style="margin-top:8px"><input id="j-key" placeholder="Public key" style="margin-top:8px"></details>
 <h2>Scheduled alerts</h2>
 <small>Sends the expiring-soon list to the ticked recipients at this time, on the days you pick. All days selected means every day.</small>
 <div class="row" style="margin-top:8px"><input type="time" id="s-time" value="08:00"><button class="b1" id="sadd">Add schedule</button></div>
@@ -132,13 +123,11 @@ details summary{cursor:pointer;padding:6px 0}
 <h2>Scheduled list</h2>
 <div id="sl"></div>
 <div class="msg" id="m-sch"></div>
-<small>Schedules run only while this page is open on a device that is awake. Keep it open on the store computer or tablet.</small>
 <details id="syncbox" style="margin-top:24px"><summary><h2 style="display:inline;margin:0">Sync across devices</h2></summary>
 <small>Free Firebase Realtime Database keeps every phone and computer on the same data. Paste the database URL and a secret key, press Connect, then use "Copy setup link" on your other devices.</small>
 <input id="sy-url" placeholder="https://your-project-default-rtdb.firebaseio.com" style="margin-top:8px">
 <input id="sy-key" placeholder="Secret store key (8+ characters)" style="margin-top:8px">
 <div class="tools" style="margin-top:8px"><button class="b2" id="sy-gen">Generate key</button><button class="b2" id="sy-save">Connect</button><button class="b2" id="sy-link">Copy setup link</button><button class="b2" id="sy-off">Disconnect</button></div>
-<label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--t);font-weight:500;margin:8px 0"><input type="checkbox" id="sy-run" style="width:20px;height:20px"> Run scheduled emails on this device</label>
 <div class="msg" id="m-sy"></div>
 </details>
 <small>App version 16 (search + show all + keyboard)</small>
@@ -260,7 +249,6 @@ async function sync() {
 function queue() { if (!cfg) return; clearTimeout(timer); timer = setTimeout(sync, 800); }
 function refresh() {
   rlist(); slist();
-  [['svc', 'j-svc'], ['tpl', 'j-tpl'], ['key', 'j-key']].forEach(([k, id]) => { if (document.activeElement !== $(id)) $(id).value = (S.ejs || {})[k] || ''; });
   if (!$('dash').hidden) dash(); if (!$('db').hidden) plist();
 }
 $('sy-url').value = cfg ? cfg.url : ''; $('sy-key').value = cfg ? cfg.key : '';
@@ -276,8 +264,6 @@ $('sy-link').onclick = async () => {
   const u = location.href.split('#')[0] + '#sync=' + btoa(JSON.stringify(cfg));
   try { await navigator.clipboard.writeText(u); msg('m-sy', 'Setup link copied. Open it on your other device.'); } catch (e) { prompt('Copy this link:', u); }
 };
-$('sy-run').checked = localStorage.getItem('expiryTracker.runsched') !== 'off';
-$('sy-run').onchange = e => localStorage.setItem('expiryTracker.runsched', e.target.checked ? 'on' : 'off');
 
 // ---- tabs ----
 const PIN = '1900', LOCKED = ['db', 'tools'];
@@ -361,7 +347,6 @@ $('dedupe').onclick = () => {
   S.log = S.log.filter(r => { const k = r.code + '|' + r.date; if (seen.has(k)) return false; seen.add(k); return true; });
   save(); dash(); msg('m-dash', 'Removed ' + (n - S.log.length) + ' duplicate record(s).');
 };
-const ALERT_SUBJ = 'Alert: Items Expiring Soon';
 function alertItems() {
   autoClean(); const seen = new Set(), out = [];
   S.log.forEach(r => {
@@ -370,10 +355,6 @@ function alertItems() {
     out.push({...byCode(r.code), code: r.code, n, lim, date: r.date.split('-').reverse().join('/')});
   });
   return out;
-}
-function alertBody() {
-  const it = alertItems(); if (!it.length) return '';
-  return ['Items expiring soon:', ''].concat(it.map(p => [(p.desc || p.code), 'Item: ' + p.code + ' | Days left: ' + p.n + ' | Expires: ' + p.date + (p.loc ? ' | Location: ' + p.loc : ''), ''].join('\n'))).join('\n');
 }
 function shell(inner) {
   return '<div style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;padding:24px 12px;"><div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;"><div style="background:#2563eb;padding:16px 20px;"><span style="color:#ffffff;font-size:15px;font-weight:bold;">⏰ Expiry Tracker</span></div><div style="padding:6px 20px 20px;">' + inner + '</div><div style="padding:12px 20px;background:#f8fafc;font-size:11px;color:#94a3b8;text-align:center;">Sent via Product Expiry Tracker</div></div></div>';
@@ -394,7 +375,6 @@ function alertHtml() {
   return shell('<p style="font-size:14px;color:#0f172a;">The following ' + (it.length === 1 ? 'item is' : it.length + ' items are') + ' approaching their expiration date:</p><table style="width:100%;border-collapse:collapse;">' + rows + '</table>');
 }
 $('prev').onclick = () => { if (!alertItems().length) return msg('m-dash', 'No items in their alert window to preview.', 1); const w = window.open('', '_blank'); if (!w) return msg('m-dash', 'Allow pop-ups to preview.', 1); w.document.write('<meta name=viewport content="width=device-width">' + alertHtml()); w.document.close(); };
-$('mail').onclick = () => { const b = alertBody(); if (!b) return msg('m-dash', 'No items in their alert window.', 1); send(ALERT_SUBJ, b, 'm-dash', false, alertHtml()); };
 
 // ---- products ----
 $('padd').onclick = () => {
@@ -468,14 +448,6 @@ $('pexp').onclick = () => {
   dl('products.csv', ['Item Code,Barcode,Description,Image,URL,LOCATION'].concat(S.products.map(p => [p.code, p.barcode, p.desc, '', p.img, p.loc].map(q).join(','))).join('\n'), 'text/csv');
 };
 
-// ---- clear records ----
-$('clear').onclick = () => {
-  const s = $('cl').value.trim();
-  if (!s) return msg('m-cl', 'Please enter or scan a barcode/item number to clear!', 1);
-  const prod = S.products.find(p => p.code === s || p.barcode === cb(s)), code = prod ? prod.code : s, n = S.log.length;
-  S.log = S.log.filter(r => r.code !== s && r.code !== code); save();
-  msg('m-cl', 'Success! Cleared ' + (n - S.log.length) + ' instances of item: ' + s); $('cl').value = '';
-};
 
 // ---- email list + backup ----
 function rlist() {
@@ -491,27 +463,6 @@ $('radd').onclick = () => {
 };
 $('rl').onchange = e => { const i = e.target.dataset.on; if (i != null) { S.recipients[i].on = e.target.checked; save(); } };
 $('rl').onclick = e => { const i = e.target.dataset.rm; if (i != null) { S.recipients.splice(i, 1); save(); rlist(); } };
-S.ejs = S.ejs || {};
-[['svc','j-svc'],['tpl','j-tpl'],['key','j-key']].forEach(([k, id]) => { $(id).value = S.ejs[k] || ''; $(id).oninput = () => { S.ejs[k] = $(id).value.trim(); save(); }; });
-async function send(subject, body, mid, auto, html) {
-  const to = S.recipients.filter(r => r.on), j = S.ejs;
-  if (!to.length) { msg(mid, 'Tick at least one recipient in Tools first.', 1); return false; }
-  if (!j.svc || !j.tpl || !j.key) {
-    if (auto) { msg(mid, 'Scheduled email skipped: set up EmailJS first.', 1); return false; }
-    location.href = 'mailto:' + to.map(r => r.email).join(',') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-    return msg(mid, 'EmailJS is not set up, so your mail app was opened instead.', 1);
-  }
-  const h = html || shell('<p style="font-size:14px;color:#0f172a;">' + esc(body).replace(/\n/g, '<br>') + '</p>');
-  msg(mid, 'Sending…'); let ok = false;
-  try {
-    const x = await fetch('https://api.emailjs.com/api/v1.0/email/send', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({service_id: j.svc, template_id: j.tpl, user_id: j.key, template_params: {to_email: to.map(r => r.email).join(','), to_name: to.map(r => r.name).filter(Boolean).join(', '), from_name: 'Cristian', subject, message: body, message_html: h}})});
-    ok = x.ok;
-  } catch (x) {}
-  msg(mid, ok ? 'Sent one email to ' + to.length + ' recipient(s).' : 'Sending failed – check your EmailJS IDs.', !ok);
-  return ok;
-}
-$('etest').onclick = () => send('Test email – Expiry Tracker', 'This is a test message from your Expiry Tracker. If you can read this, alerts will reach you.', 'm-em');
 rlist();
 $('bk').onclick = () => dl('expiry-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(S), 'application/json');
 $('rs').onchange = async e => {
@@ -531,13 +482,13 @@ $('sadd').onclick = () => {
   if (!$('s-time').value) return msg('m-sch', 'Pick a time.', 1);
   if (!selDays.size) return msg('m-sch', 'Pick at least one day.', 1);
   S.sched.push({id: uid(), type: 'alert', time: $('s-time').value, days: [...selDays], on: true, last: ''});
-  save(); slist(); keepAwake(); msg('m-sch', 'Schedule added.');
+  save(); slist(); msg('m-sch', 'Schedule added.');
 };
 $('madd').onclick = () => {
   const text = $('mtext').value.trim(), date = $('mdate').value, time = $('mtime').value;
   if (!text || !date || !time) return msg('m-sch', 'Enter the message, date and time.', 1);
   S.sched.push({id: uid(), type: 'reminder', text, date, time, on: true, last: ''});
-  save(); slist(); keepAwake(); $('mtext').value = ''; msg('m-sch', 'Reminder added.');
+  save(); slist(); $('mtext').value = ''; msg('m-sch', 'Reminder added.');
 };
 function slist() {
   $('sl').innerHTML = S.sched.map((s, i) => {
@@ -549,35 +500,7 @@ function slist() {
 }
 $('sl').onchange = e => { const i = e.target.dataset.son; if (i != null) { S.sched[i].on = e.target.checked; save(); } };
 $('sl').onclick = e => { const i = e.target.dataset.srm; if (i != null) { S.sched.splice(i, 1); save(); slist(); } };
-let busy = false;
-async function tick() {
-  if (localStorage.getItem('expiryTracker.runsched') === 'off') return;
-  if (busy) return; busy = true;
-  try {
-    const now = new Date(), today = dkey(now);
-    for (const s of S.sched) {
-      if (!s.on) continue;
-      const due = new Date(today + 'T' + s.time), late = (now - due) / 6e4;
-      if (s.type === 'alert') {
-        if (!s.days.includes(now.getDay()) || s.last.slice(0, 10) === today || late < 0 || late > 60) continue;
-        const b = alertBody(); s.last = today + ' ' + s.time;
-        if (b) await send(ALERT_SUBJ, b, 'm-sch', true, alertHtml());
-      } else {
-        if (s.last) continue;
-        const l = (now - new Date(s.date + 'T' + s.time)) / 6e4;
-        if (l < 0) continue;
-        if (l > 60) { s.last = 'missed'; continue; }
-        s.last = (await send('Reminder', s.text, 'm-sch', true)) ? 'sent' : 'failed';
-      }
-    }
-    save(); slist();
-  } finally { busy = false; }
-}
-let wl;
-async function keepAwake() { try { if ('wakeLock' in navigator && !wl && S.sched.some(s => s.on)) { wl = await navigator.wakeLock.request('screen'); wl.onrelease = () => wl = null; } } catch (x) {} }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { keepAwake(); tick(); } });
-document.addEventListener('click', keepAwake, {once: true});
-setInterval(tick, 20000); slist(); tick();
+slist(); // alerts and reminders are sent by the Google Apps Script, not by this page
 
 // ---- camera scanner ----
 let stream, raf, popup;
@@ -600,7 +523,6 @@ async function scan(done) {
 }
 $('camx').onclick = stopCam;
 $('cam1').onclick = () => scan(v => { $('bc').value = v; $('dt').focus(); if ($('dt').showPicker) try { $('dt').showPicker(); } catch (x) {} });
-$('cam2').onclick = () => scan(v => { $('cl').value = v; });
 
 $('logo').src = document.querySelector('link[rel=icon]').href;
 setInterval(sync, 20000);
